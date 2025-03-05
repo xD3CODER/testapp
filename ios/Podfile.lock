@@ -2018,6 +2018,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - Yoga
   - SocketRocket (0.7.1)
+  - tet (1.0.0):
+    - ExpoModulesCore
   - ViroKit (1.0):
     - React
   - ViroReact (1.0):
@@ -2118,6 +2120,7 @@ DEPENDENCIES:
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
   - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNScreens (from `../node_modules/react-native-screens`)
+  - tet (from `../modules/tet/ios`)
   - "ViroKit (from `../node_modules/@reactvision/react-viro/ios/dist/ViroRenderer/`)"
   - "ViroReact (from `../node_modules/@reactvision/react-viro/ios`)"
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
@@ -2310,6 +2313,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-reanimated"
   RNScreens:
     :path: "../node_modules/react-native-screens"
+  tet:
+    :path: "../modules/tet/ios"
   ViroKit:
     :path: "../node_modules/@reactvision/react-viro/ios/dist/ViroRenderer/"
   ViroReact:
@@ -2410,6 +2415,7 @@ SPEC CHECKSUMS:
   RNReanimated: a2692304a6568bc656c04c8ffea812887d37436e
   RNScreens: 351f431ef2a042a1887d4d90e1c1024b8ae9d123
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
+  tet: e54039171df4f845284ca5f57b6de88753fa807c
   ViroKit: 728e2547f4ac693a69fa7652813ec178a361dbd6
   ViroReact: 0fe7ad200cee750209ef1e767f677a90f4736bf0
   Yoga: 90d80701b27946c4b23461c00a7207f300a6ff71

@@ -1,60 +1,39 @@
-// Mise à jour du composant explore.tsx pour utiliser le nouveau scanner de mesh
-import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Alert, DeviceEventEmitter } from 'react-native';
-import {
-  ViroARSceneNavigator,
-  ViroMaterials
-} from '@reactvision/react-viro';
+// app/(tabs)/explore.tsx - Application de scan 3D avec reconstruction avancée
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, Alert, DeviceEventEmitter, Platform, Share } from 'react-native';
 
 // Importer les composants
-import SceneScanner from '@/components/ScanView'; // Notre nouveau scanner de mesh
+import SceneScanner from '@/components/ScanView';
 import PreviewARScene from '@/components/PreviewView';
-
-// Initialiser les matériaux
-const initMaterials = () => {
-  ViroMaterials.createMaterials({
-    previewBackgroundMaterial: {
-      diffuseColor: 'rgb(20, 30, 50)',
-      lightingModel: "Constant"
-    },
-    defaultPointMaterial: {
-      diffuseColor: 'rgb(200, 200, 200)',
-      lightingModel: "Lambert"
-    }
-  });
-};
-
-// Initialiser les matériaux
-initMaterials();
 
 const Scan3DApp = () => {
   // États
   const [scanProgress, setScanProgress] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
   const [scanData, setScanData] = useState(null);
+  const [modelData, setModelData] = useState(null);
   const [currentScene, setCurrentScene] = useState('scan'); // 'scan' ou 'preview'
   const [deviceSupported, setDeviceSupported] = useState(true); // Présumer le support par défaut
-
-  // Référence au navigateur AR
-  const arNavigatorRef = useRef(null);
+  const [previewMode, setPreviewMode] = useState('pointcloud'); // 'pointcloud', 'textured', 'wireframe'
 
   // Logs de debug
   useEffect(() => {
     console.log(`État actuel: scène=${currentScene}, scanning=${isScanning}, points=${scanProgress}`);
-    console.log(`Données disponibles: ${scanData ? `Oui (${scanData.points?.length} points)` : 'Non'}`);
-  }, [currentScene, isScanning, scanProgress, scanData]);
+    console.log(`Données disponibles: ${scanData ? `Oui (${scanData.mesh?.count || 0} points, ${scanData.images?.length || 0} images)` : 'Non'}`);
+    console.log(`Modèle reconstruit: ${modelData ? 'Oui' : 'Non'}`);
+  }, [currentScene, isScanning, scanProgress, scanData, modelData]);
 
-  // Écouteurs d'événements personnalisés
+  // Écouteurs d'événements
   useEffect(() => {
     // Écouter les événements du module natif
     const startListener = DeviceEventEmitter.addListener('MESH_SCAN_STARTED', () => {
-      console.log("Scan de mesh démarré via natif");
+      console.log("Scan de mesh démarré");
     });
-    
+
     const completeListener = DeviceEventEmitter.addListener('MESH_SCAN_COMPLETED', () => {
-      console.log("Scan de mesh terminé via natif");
+      console.log("Scan de mesh terminé");
     });
-    
+
     return () => {
       startListener.remove();
       completeListener.remove();
@@ -66,6 +45,7 @@ const Scan3DApp = () => {
     console.log("Démarrage du scan");
     setScanProgress(0);
     setScanData(null);
+    setModelData(null);
     setIsScanning(true);
   };
 
@@ -77,23 +57,17 @@ const Scan3DApp = () => {
 
   // Progression du scan
   const handleScanProgress = (count) => {
-    setScanProgress(prevCount => {
-      const newCount = prevCount + count;
-      console.log(`Progression du scan: ${newCount} points`);
-      return newCount;
-    });
+    setScanProgress(count);
   };
 
   // Scan terminé
   const handleScanComplete = (data) => {
     console.log(`Scan terminé. Données reçues: ${data ? 'Oui' : 'Non'}`);
-    if (data) {
-      console.log(`Points dans les données: ${data.points?.length || 0}`);
-    }
 
     // Mettre à jour les données de scan
-    if (data && data.points && data.points.length > 0) {
-      console.log(`Stockage de ${data.points.length} points capturés`);
+    if (data && ((data.mesh && data.mesh.count > 0) ||
+                (data.images && data.images.length > 0))) {
+      console.log(`Stockage de ${data.mesh?.count || 0} points capturés et ${data.images?.length || 0} images`);
       setScanData(data);
 
       // Passer à la prévisualisation après un délai
@@ -106,9 +80,19 @@ const Scan3DApp = () => {
       console.log("Aucune donnée ni progression - pas de prévisualisation possible");
       Alert.alert(
         "Scan incomplet",
-        "Pas assez de points capturés pour générer une prévisualisation. Essayez de scanner à nouveau.",
+        "Pas assez de données capturées pour générer une prévisualisation. Essayez de scanner à nouveau.",
         [{ text: "OK" }]
       );
+    }
+  };
+
+  // Modèle 3D terminé
+  const handleModelComplete = (data) => {
+    console.log(`Modèle 3D terminé: ${data ? 'Oui' : 'Non'}`);
+    if (data) {
+      setModelData(data);
+      // Mettre à jour le mode de prévisualisation pour utiliser le modèle texturé
+      setPreviewMode('textured');
     }
   };
 
@@ -119,12 +103,64 @@ const Scan3DApp = () => {
   };
 
   // Exporter le modèle 3D
-  const exportModel = () => {
-    Alert.alert(
-      "Exportation",
-      "Fonctionnalité à venir - Le modèle 3D sera exportable en OBJ/PLY/GLTF",
-      [{ text: "OK" }]
-    );
+  const exportModel = async () => {
+    if (!modelData && !scanData) {
+      Alert.alert("Erreur", "Aucun modèle à exporter");
+      return;
+    }
+
+    try {
+      // Si nous avons un modèle reconstruit, l'utiliser
+      if (modelData) {
+        const result = await MeshScanner.exportModel('obj', {
+          quality: 0.9,
+          includeMaterials: true
+        });
+
+        if (result.success) {
+          Alert.alert(
+            "Exportation réussie",
+            `Le modèle 3D a été exporté vers: ${result.path}`,
+            [{ text: "OK" }]
+          );
+
+          // Proposer de partager le fichier
+          if (Platform.OS !== 'web') {
+            try {
+              await Share.share({
+                url: result.path,
+                message: 'Voici mon modèle 3D numérisé avec MeshScanner!'
+              });
+            } catch (error) {
+              console.error("Erreur de partage:", error);
+            }
+          }
+        } else {
+          throw new Error("Échec de l'exportation");
+        }
+      } else {
+        // Sinon, afficher un message pour informer l'utilisateur
+        Alert.alert(
+          "Reconstruction nécessaire",
+          "Pour obtenir un fichier 3D de meilleure qualité, veuillez d'abord lancer la reconstruction avancée.",
+          [{ text: "OK" }]
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        "Erreur d'exportation",
+        `Une erreur est survenue: ${error.message}`,
+        [{ text: "OK" }]
+      );
+    }
+  };
+
+  // Changer le mode de prévisualisation
+  const togglePreviewMode = () => {
+    const modes = ['pointcloud', 'wireframe', 'textured'];
+    const currentIndex = modes.indexOf(previewMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    setPreviewMode(modes[nextIndex]);
   };
 
   // Rendu des contrôles en fonction de la scène
@@ -145,11 +181,11 @@ const Scan3DApp = () => {
               {isScanning ? 'Terminer le scan' : 'Commencer le scan'}
             </Text>
           </TouchableOpacity>
-          
+
           {!deviceSupported && (
             <Text style={styles.warningText}>
-              Votre appareil ne supporte pas le scan de mesh 3D.
-              Un iPhone/iPad avec LiDAR est recommandé.
+              Votre appareil ne supporte pas le scan 3D optimal.
+              Un iPhone/iPad avec LiDAR est recommandé pour de meilleurs résultats.
             </Text>
           )}
         </View>
@@ -159,7 +195,9 @@ const Scan3DApp = () => {
         <View style={styles.previewControls}>
           <Text style={styles.previewTitle}>Prévisualisation 3D</Text>
           <Text style={styles.previewInfo}>
-            {scanData?.points?.length || 0} points capturés
+            {scanData?.mesh?.count || 0} points capturés
+            {scanData?.images && ` • ${scanData.images.length} images`}
+            {modelData && ' • Modèle reconstruit'}
           </Text>
 
           <View style={styles.buttonRow}>
@@ -167,7 +205,17 @@ const Scan3DApp = () => {
               style={[styles.button, styles.previewButton]}
               onPress={returnToScan}
             >
-              <Text style={styles.buttonText}>Retour</Text>
+              <Text style={styles.buttonText}>Nouveau scan</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.button, styles.modeButton]}
+              onPress={togglePreviewMode}
+            >
+              <Text style={styles.buttonText}>
+                Mode: {previewMode === 'pointcloud' ? 'Points' :
+                       previewMode === 'wireframe' ? 'Filaire' : 'Texturé'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -182,37 +230,6 @@ const Scan3DApp = () => {
     }
   };
 
-  // Rendu du feedback de scan
-  const renderScanFeedback = () => {
-    if (currentScene === 'scan' && isScanning) {
-      return (
-        <View style={styles.scanFeedback}>
-          <Text style={styles.scanFeedbackText}>
-            {scanProgress < 500 ?
-              "Déplacez-vous lentement autour de l'objet..." :
-              scanProgress < 2000 ?
-                "Continuez à scanner pour capturer tous les détails..." :
-                "Excellent! Vous pouvez terminer le scan ou continuer pour plus de détails"
-            }
-          </Text>
-          <View style={styles.progressBar}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${Math.min(100, scanProgress/50)}%`,
-                  backgroundColor: scanProgress < 500 ? '#FF9800' :
-                                   scanProgress < 2000 ? '#2196F3' : '#4CAF50'
-                }
-              ]}
-            />
-          </View>
-        </View>
-      );
-    }
-    return null;
-  };
-
   // Notification qu'un appareil compatible est requis
   const onDeviceNotSupported = () => {
     setDeviceSupported(false);
@@ -222,22 +239,24 @@ const Scan3DApp = () => {
     <View style={styles.container}>
       {currentScene === 'scan' && (
         <View style={styles.scanContainer}>
-          {/* Scanner de mesh  */}
+          {/* Scanner avec photogrammétrie */}
           <SceneScanner
             isScanning={isScanning}
             onScanProgress={handleScanProgress}
             onScanComplete={handleScanComplete}
             onDeviceNotSupported={onDeviceNotSupported}
+            onModelComplete={handleModelComplete}
           />
         </View>
       )}
-      
-      {currentScene === 'preview' && scanData && (
-        <PreviewARScene scanData={scanData}/>
-      )}
 
-      {/* Feedback pendant le scan */}
-      {renderScanFeedback()}
+      {currentScene === 'preview' && (scanData || modelData) && (
+        <PreviewARScene
+          scanData={scanData}
+          modelData={modelData}
+          displayMode={previewMode}
+        />
+      )}
 
       {/* UI contrôles superposés */}
       {renderControls()}
@@ -294,6 +313,9 @@ const styles = StyleSheet.create({
   previewButton: {
     backgroundColor: '#607D8B',
   },
+  modeButton: {
+    backgroundColor: '#9C27B0',
+  },
   exportButton: {
     backgroundColor: '#4CAF50',
   },
@@ -328,33 +350,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
-    paddingHorizontal: 20,
-  },
-  scanFeedback: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    padding: 10,
-    borderRadius: 8,
-  },
-  scanFeedbackText: {
-    color: 'white',
-    textAlign: 'center',
-    fontSize: 14,
-  },
-  progressBar: {
-    width: '80%',
-    height: 8,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 4,
-    marginTop: 8,
-    alignSelf: 'center',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 4,
+    flexWrap: 'wrap',
+    paddingHorizontal: 10,
   }
 });
 
