@@ -1,0 +1,17 @@
+{
+  "platforms": [
+    "apple",
+    "android",
+    "web"
+  ],
+  "apple": {
+    "modules": [
+      "ExpoMeshScannerModule"
+    ]
+  },
+  "android": {
+    "modules": [
+      "expo.modules.meshscanner.ExpoMeshScannerModule"
+    ]
+  }
+}

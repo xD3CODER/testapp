@@ -6,7 +6,7 @@ import {
   ViroOrbitCamera,
   ViroSphere,
   ViroMaterials,
-    ViroNode,
+  ViroNode,
   ViroDirectionalLight,
   ViroText,
   ViroBox
@@ -38,7 +38,7 @@ const initializeMaterials = () => {
   });
 
   // Ajouter quelques matériaux supplémentaires
-  materials.backgroundMaterial = {
+  materials.previewBackgroundMaterial = {
     diffuseColor: 'rgb(20, 30, 50)',
     lightingModel: "Constant"
   };
@@ -279,20 +279,20 @@ const PreviewARScene = ({ scanData }) => {
       <ViroBox
         position={[0, 0, -15]}
         scale={[30, 30, 0.1]}
-        materials={["backgroundMaterial"]}
+        materials={["previewBackgroundMaterial"]}
       />
-<ViroNode
-  position={[0, 0, 0]}
-  animation={{
-    name: "rotate",
-    run: true,
-    loop: true,
-    duration: 4000
-  }}
->
-      {/* Nuage de points */}
-      {renderPoints()}
-</ViroNode>
+      <ViroNode
+        position={[0, 0, 0]}
+        animation={{
+          name: "rotate",
+          run: true,
+          loop: true,
+          duration: 4000
+        }}
+      >
+        {/* Nuage de points */}
+        {renderPoints()}
+      </ViroNode>
 
       {/* Texte d'information */}
       {renderInfoText()}
@@ -307,7 +307,6 @@ const ModelViewer = ({ scanData }) => {
     initializeMaterials();
   }, []);
 
-  console.log(scanData)
   return (
     <Viro3DSceneNavigator
       initialScene={{

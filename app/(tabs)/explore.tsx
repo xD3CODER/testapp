@@ -1,4 +1,4 @@
-// App.js - Version optimisée avec sélection directe d'objet
+// Mise à jour du composant explore.tsx pour utiliser le nouveau scanner de mesh
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Alert, DeviceEventEmitter } from 'react-native';
 import {
@@ -6,24 +6,19 @@ import {
   ViroMaterials
 } from '@reactvision/react-viro';
 
-// Importer les scènes
-import ScanARScene from '@/components/ScanView';
+// Importer les composants
+import SceneScanner from '@/components/ScanView'; // Notre nouveau scanner de mesh
 import PreviewARScene from '@/components/PreviewView';
 
 // Initialiser les matériaux
 const initMaterials = () => {
-  // Définition des matériaux
   ViroMaterials.createMaterials({
-    surfaceMaterial: {
-      diffuseColor: 'rgba(100, 180, 255, 0.3)',
-      lightingModel: "Lambert"
-    },
     previewBackgroundMaterial: {
       diffuseColor: 'rgb(20, 30, 50)',
       lightingModel: "Constant"
     },
-    markerMaterial: {
-      diffuseColor: 'rgba(255, 128, 0, 0.8)',
+    defaultPointMaterial: {
+      diffuseColor: 'rgb(200, 200, 200)',
       lightingModel: "Lambert"
     }
   });
@@ -33,63 +28,38 @@ const initMaterials = () => {
 initMaterials();
 
 const Scan3DApp = () => {
-  // États partagés
+  // États
   const [scanProgress, setScanProgress] = useState(0);
-  const [surfaceFound, setSurfaceFound] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanData, setScanData] = useState(null);
   const [currentScene, setCurrentScene] = useState('scan'); // 'scan' ou 'preview'
-
-  // Nouveaux états pour la sélection d'objet
-  const [selectionMode, setSelectionMode] = useState(true); // Commencer en mode sélection
-  const [objectSelected, setObjectSelected] = useState(false);
-  const [objectCenter, setObjectCenter] = useState(null);
+  const [deviceSupported, setDeviceSupported] = useState(true); // Présumer le support par défaut
 
   // Référence au navigateur AR
   const arNavigatorRef = useRef(null);
 
-  // Effet pour logs de debug
+  // Logs de debug
   useEffect(() => {
-    console.log(`État actuel: scène=${currentScene}, scanning=${isScanning}, points=${scanProgress}, surface=${surfaceFound}`);
+    console.log(`État actuel: scène=${currentScene}, scanning=${isScanning}, points=${scanProgress}`);
     console.log(`Données disponibles: ${scanData ? `Oui (${scanData.points?.length} points)` : 'Non'}`);
-    console.log(`Sélection: mode=${selectionMode}, objet sélectionné=${objectSelected}`);
-    if (objectCenter) {
-      console.log(`Centre de l'objet: [${objectCenter[0].toFixed(2)}, ${objectCenter[1].toFixed(2)}, ${objectCenter[2].toFixed(2)}]`);
-    }
-  }, [currentScene, isScanning, scanProgress, surfaceFound, scanData, selectionMode, objectSelected, objectCenter]);
+  }, [currentScene, isScanning, scanProgress, scanData]);
 
-  // Fonction pour gérer la sélection d'objet
-  const handleObjectSelection = () => {
-    console.log("Demande de sélection d'objet");
-
-    // Émettre un événement pour capturer le centre du champ de vision
-    DeviceEventEmitter.emit('SELECT_OBJECT');
-
-    // Attendre que le centre soit capturé
-    setTimeout(() => {
-      if (objectCenter) {
-        setObjectSelected(true);
-        setSelectionMode(false);
-        // Message utilisateur
-        Alert.alert(
-          "Objet sélectionné",
-          "L'objet a été sélectionné. Vous pouvez maintenant commencer le scan."
-        );
-      } else {
-        // Si pas de point central trouvé après délai
-        Alert.alert(
-          "Échec de sélection",
-          "Impossible de détecter un objet à cette position. Essayez de pointer plus précisément vers l'objet."
-        );
-      }
-    }, 500);
-  };
-
-  // Fonction appelée quand l'objet est sélectionné
-  const handleObjectCenterDetected = (center) => {
-    console.log("Centre de l'objet détecté:", center);
-    setObjectCenter(center);
-  };
+  // Écouteurs d'événements personnalisés
+  useEffect(() => {
+    // Écouter les événements du module natif
+    const startListener = DeviceEventEmitter.addListener('MESH_SCAN_STARTED', () => {
+      console.log("Scan de mesh démarré via natif");
+    });
+    
+    const completeListener = DeviceEventEmitter.addListener('MESH_SCAN_COMPLETED', () => {
+      console.log("Scan de mesh terminé via natif");
+    });
+    
+    return () => {
+      startListener.remove();
+      completeListener.remove();
+    };
+  }, []);
 
   // Démarrer le scan
   const startScan = () => {
@@ -97,14 +67,12 @@ const Scan3DApp = () => {
     setScanProgress(0);
     setScanData(null);
     setIsScanning(true);
-    DeviceEventEmitter.emit('START_SCAN');
   };
 
   // Terminer le scan
   const completeScan = () => {
     console.log("Arrêt du scan");
     setIsScanning(false);
-    DeviceEventEmitter.emit('STOP_SCAN');
   };
 
   // Progression du scan
@@ -112,14 +80,8 @@ const Scan3DApp = () => {
     setScanProgress(prevCount => {
       const newCount = prevCount + count;
       console.log(`Progression du scan: ${newCount} points`);
-      return Math.min(newCount, 2000); // Augmenté à 2000 points max
+      return newCount;
     });
-  };
-
-  // Surface détectée
-  const handleSurfaceFound = () => {
-    console.log("Surface trouvée");
-    setSurfaceFound(true);
   };
 
   // Scan terminé
@@ -140,51 +102,6 @@ const Scan3DApp = () => {
         setCurrentScene('preview');
       }, 500);
     }
-    // Si pas de données mais progression, créer des données factices
-    else if (scanProgress > 0) {
-      console.log(`Génération de données factices (${scanProgress} points)`);
-
-      // Créer des données factices basées sur scanProgress
-      const fakePoints = [];
-      const fakeColors = [];
-
-      const maxPoints = Math.min(scanProgress, 200);
-
-      for (let i = 0; i < maxPoints; i++) {
-        // Coordonnées sphériques
-        const theta = Math.random() * 2 * Math.PI;
-        const phi = Math.acos(2 * Math.random() - 1);
-        const radius = 0.5 + Math.random() * 0.3;
-
-        // Conversion en coordonnées cartésiennes
-        const x = radius * Math.sin(phi) * Math.cos(theta);
-        const y = radius * Math.sin(phi) * Math.sin(theta);
-        const z = radius * Math.cos(phi);
-
-        fakePoints.push([x, y, z]);
-
-        // Couleur variée basée sur la position
-        fakeColors.push([
-          0.5 + x/2,
-          0.5 + y/2,
-          0.5 + z/2
-        ]);
-      }
-
-      // Stocker les données factices
-      const fakeData = {
-        points: fakePoints,
-        colors: fakeColors
-      };
-
-      setScanData(fakeData);
-
-      // Passer à la prévisualisation après un délai
-      setTimeout(() => {
-        console.log("Passage à la prévisualisation (données factices)");
-        setCurrentScene('preview');
-      }, 500);
-    }
     else {
       console.log("Aucune donnée ni progression - pas de prévisualisation possible");
       Alert.alert(
@@ -201,80 +118,42 @@ const Scan3DApp = () => {
     setCurrentScene('scan');
   };
 
-  // Obtenir la scène courante et ses propriétés
-  const getCurrentScene = () => {
-    if (currentScene === 'scan') {
-      return {
-        scene: ScanARScene,
-        passProps: {
-          isScanning,
-          selectionMode,
-          objectSelected,
-          objectCenter,
-          onScanProgress: handleScanProgress,
-          onSurfaceFound: handleSurfaceFound,
-          onScanComplete: handleScanComplete,
-          onObjectSelected: handleObjectCenterDetected,
-          parentSurfaceFound: surfaceFound,
-        }
-      };
-    }
+  // Exporter le modèle 3D
+  const exportModel = () => {
+    Alert.alert(
+      "Exportation",
+      "Fonctionnalité à venir - Le modèle 3D sera exportable en OBJ/PLY/GLTF",
+      [{ text: "OK" }]
+    );
   };
 
-  // Rendu des contrôles en fonction de la scène et du mode
+  // Rendu des contrôles en fonction de la scène
   const renderControls = () => {
     if (currentScene === 'scan') {
-      if (selectionMode) {
-        return (
-          <View style={styles.uiContainer}>
-            <Text style={styles.instructionText}>
-              Pointez l'appareil vers l'objet que vous souhaitez scanner,{"\n"}
-              puis appuyez sur "Sélectionner cet objet"
+      return (
+        <View style={styles.uiContainer}>
+          <Text style={styles.progressText}>
+            Points capturés: {scanProgress}
+          </Text>
+
+          <TouchableOpacity
+            style={[styles.button, isScanning ? styles.stopButton : styles.startButton]}
+            onPress={isScanning ? completeScan : startScan}
+            disabled={!deviceSupported}
+          >
+            <Text style={styles.buttonText}>
+              {isScanning ? 'Terminer le scan' : 'Commencer le scan'}
             </Text>
-
-            <TouchableOpacity
-              style={[styles.button, styles.selectButton]}
-              onPress={handleObjectSelection}
-            >
-              <Text style={styles.buttonText}>
-                Sélectionner cet objet
-              </Text>
-            </TouchableOpacity>
-          </View>
-        );
-      } else {
-        return (
-          <View style={styles.uiContainer}>
-            <Text style={styles.progressText}>
-              Points capturés: {scanProgress}
+          </TouchableOpacity>
+          
+          {!deviceSupported && (
+            <Text style={styles.warningText}>
+              Votre appareil ne supporte pas le scan de mesh 3D.
+              Un iPhone/iPad avec LiDAR est recommandé.
             </Text>
-
-            {objectSelected ? (
-              <TouchableOpacity
-                style={[styles.button, isScanning ? styles.stopButton : styles.startButton]}
-                onPress={isScanning ? completeScan : startScan}
-              >
-                <Text style={styles.buttonText}>
-                  {isScanning ? 'Terminer le scan' : 'Commencer le scan'}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <Text style={styles.instructionText}>
-                Aucun objet sélectionné. Retournez au mode sélection.
-              </Text>
-            )}
-
-            <TouchableOpacity
-              style={[styles.button, styles.backButton]}
-              onPress={() => setSelectionMode(true)}
-            >
-              <Text style={styles.buttonText}>
-                Retour à la sélection
-              </Text>
-            </TouchableOpacity>
-          </View>
-        );
-      }
+          )}
+        </View>
+      );
     } else {
       return (
         <View style={styles.previewControls}>
@@ -293,7 +172,7 @@ const Scan3DApp = () => {
 
             <TouchableOpacity
               style={[styles.button, styles.exportButton]}
-              onPress={() => Alert.alert("Export", "Fonctionnalité à venir")}
+              onPress={exportModel}
             >
               <Text style={styles.buttonText}>Exporter</Text>
             </TouchableOpacity>
@@ -309,11 +188,11 @@ const Scan3DApp = () => {
       return (
         <View style={styles.scanFeedback}>
           <Text style={styles.scanFeedbackText}>
-            {scanProgress < 50 ?
-              "Déplacez lentement l'appareil autour de l'objet..." :
-              scanProgress < 200 ?
-                "Continuez à scanner sous différents angles..." :
-                "Bon nombre de points capturés, vous pouvez terminer le scan"
+            {scanProgress < 500 ?
+              "Déplacez-vous lentement autour de l'objet..." :
+              scanProgress < 2000 ?
+                "Continuez à scanner pour capturer tous les détails..." :
+                "Excellent! Vous pouvez terminer le scan ou continuer pour plus de détails"
             }
           </Text>
           <View style={styles.progressBar}>
@@ -321,9 +200,9 @@ const Scan3DApp = () => {
               style={[
                 styles.progressFill,
                 {
-                  width: `${Math.min(100, scanProgress/20)}%`,
-                  backgroundColor: scanProgress < 50 ? '#FF9800' :
-                                   scanProgress < 200 ? '#2196F3' : '#4CAF50'
+                  width: `${Math.min(100, scanProgress/50)}%`,
+                  backgroundColor: scanProgress < 500 ? '#FF9800' :
+                                   scanProgress < 2000 ? '#2196F3' : '#4CAF50'
                 }
               ]}
             />
@@ -334,19 +213,28 @@ const Scan3DApp = () => {
     return null;
   };
 
+  // Notification qu'un appareil compatible est requis
+  const onDeviceNotSupported = () => {
+    setDeviceSupported(false);
+  };
+
   return (
     <View style={styles.container}>
-      {/* Un seul navigateur AR qui ne se démonte jamais */}
-      <ViroARSceneNavigator
-        ref={arNavigatorRef}
-        initialScene={getCurrentScene()}
-        style={styles.arView}
-        worldAlignment="gravity"  // Meilleure stabilité
-        videoQuality="high"       // Meilleure qualité pour la détection
-        planeDetection={true}     // Détection explicite des plans
-      />
-      {scanData &&
-      <PreviewARScene scanData={scanData}/> }
+      {currentScene === 'scan' && (
+        <View style={styles.scanContainer}>
+          {/* Scanner de mesh  */}
+          <SceneScanner
+            isScanning={isScanning}
+            onScanProgress={handleScanProgress}
+            onScanComplete={handleScanComplete}
+            onDeviceNotSupported={onDeviceNotSupported}
+          />
+        </View>
+      )}
+      
+      {currentScene === 'preview' && scanData && (
+        <PreviewARScene scanData={scanData}/>
+      )}
 
       {/* Feedback pendant le scan */}
       {renderScanFeedback()}
@@ -363,8 +251,8 @@ const styles = StyleSheet.create({
     marginVertical: 70,
     position: 'relative'
   },
-  arView: {
-    flex: 1
+  scanContainer: {
+    flex: 1,
   },
   uiContainer: {
     position: 'absolute',
@@ -382,11 +270,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 10,
   },
-  instructionText: {
-    color: 'white',
-    fontSize: 16,
+  warningText: {
+    color: '#FFA500',
+    fontSize: 14,
     textAlign: 'center',
-    marginVertical: 10,
+    marginTop: 10,
+    padding: 10,
   },
   button: {
     paddingVertical: 12,
@@ -401,13 +290,6 @@ const styles = StyleSheet.create({
   },
   stopButton: {
     backgroundColor: '#F44336',
-  },
-  selectButton: {
-    backgroundColor: '#FF9800',
-  },
-  backButton: {
-    backgroundColor: '#607D8B',
-    marginTop: 10,
   },
   previewButton: {
     backgroundColor: '#607D8B',
