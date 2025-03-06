@@ -1,100 +1,109 @@
-// src/index.ts - API JavaScript complète du module ExpoMeshScanner
-
-import ExpoMeshScannerModule, {
-  MeshUpdateEvent,
-  ImageCapturedEvent,
-  GuidanceUpdateEvent,
-  MeshCompleteEvent,
-  SupportInfoEvent,
-  ScanOptions,
-  CaptureMode,
-  ReconstructionProgressEvent,
-  ReconstructionCompleteEvent
-} from './ExpoMeshScannerModule';
-import ExpoMeshScannerView from './ExpoMeshScannerView';
+// ExpoMeshScannerModule.ts
+import { requireNativeModule } from 'expo-modules-core';
 import { EventEmitter } from 'expo-modules-core';
 
-// Créer un émetteur d'événements pour le module
+// Define event data types
+export interface ScanStateChangedEvent {
+  state: string;
+}
+
+export interface ScanProgressUpdateEvent {
+  feedback: string;
+}
+
+export interface ReconstructionProgressEvent {
+  progress: number;
+  stage: string;
+}
+
+export interface ReconstructionCompleteEvent {
+  success: boolean;
+  modelPath: string;
+  previewPath: string;
+}
+
+export interface ScanErrorEvent {
+  message: string;
+}
+
+export interface SupportInfoEvent {
+  supported: boolean;
+  reason?: string;
+}
+
+// Define scan options
+export interface ScanOptions {
+  enableOverCapture?: boolean;
+  highQualityMode?: boolean;
+}
+
+// Define reconstruction options
+export interface ReconstructionOptions {
+  detailLevel?: 'low' | 'medium' | 'high';
+}
+
+// Get the native module
+const ExpoMeshScannerModule = requireNativeModule('ExpoMeshScanner');
+
+// Create an event emitter
 const emitter = new EventEmitter(ExpoMeshScannerModule);
 
-export {
-  ExpoMeshScannerView,
-  MeshUpdateEvent,
-  ImageCapturedEvent,
-  GuidanceUpdateEvent,
-  MeshCompleteEvent,
-  SupportInfoEvent,
-  ScanOptions,
-  CaptureMode,
-  ReconstructionProgressEvent,
-  ReconstructionCompleteEvent
-};
-
-// API complète exposée à JavaScript
+// Create the JavaScript API
 export default {
-  // Exposer les méthodes natives
+  // Check if device supports Object Capture
   async checkSupport(): Promise<SupportInfoEvent> {
     return await ExpoMeshScannerModule.checkSupport();
   },
 
-  // Sélectionner l'objet à scanner
-  async selectObject(x: number, y: number, width: number, height: number): Promise<{ success: boolean, rect: { x: number, y: number, width: number, height: number } }> {
-    return await ExpoMeshScannerModule.selectObject(x, y, width, height);
-  },
-
-  async startScan(options: ScanOptions = {}): Promise<{ success: boolean }> {
+  // Start a new scan session
+  async startScan(options: ScanOptions = {}): Promise<{ success: boolean; imagesPath: string }> {
     return await ExpoMeshScannerModule.startScan(options);
   },
 
-  async captureImage(): Promise<{ success: boolean, imageCount: number }> {
-    return await ExpoMeshScannerModule.captureImage();
+  // Start detecting the object
+  async startDetecting(): Promise<{ success: boolean }> {
+    return await ExpoMeshScannerModule.startDetecting();
   },
 
-  async stopScan(): Promise<MeshCompleteEvent> {
-    return await ExpoMeshScannerModule.stopScan();
+  // Start capturing images
+  async startCapturing(): Promise<{ success: boolean }> {
+    return await ExpoMeshScannerModule.startCapturing();
   },
 
-  // Nouvelle API pour la reconstruction 3D avancée
-  async configureReconstruction(options: {
-    meshSimplificationFactor?: number;
-    textureWidth?: number;
-    textureHeight?: number;
-    enableRefinement?: boolean;
-    refinementIterations?: number;
-    pointCloudDensity?: number;
-  } = {}): Promise<{ success: boolean }> {
-    return await ExpoMeshScannerModule.configureReconstruction(options);
+  // Finish scan after completion
+  async finishScan(): Promise<{ success: boolean }> {
+    return await ExpoMeshScannerModule.finishScan();
   },
 
-  async startReconstruction(): Promise<{ success: boolean }> {
-    return await ExpoMeshScannerModule.startReconstruction();
+  // Cancel the scan
+  async cancelScan(): Promise<{ success: boolean }> {
+    return await ExpoMeshScannerModule.cancelScan();
   },
 
-  async cancelReconstruction(): Promise<{ success: boolean }> {
-    return await ExpoMeshScannerModule.cancelReconstruction();
+  // Generate 3D model from captured images
+  async reconstructModel(options: ReconstructionOptions = {}): Promise<{
+    success: boolean;
+    modelPath: string;
+    previewPath: string;
+  }> {
+    return await ExpoMeshScannerModule.reconstructModel(options);
   },
 
-  async exportModel(format: 'obj' | 'glb' | 'gltf', options: {
-    quality?: number;
-    includeMaterials?: boolean;
-  } = {}): Promise<{ success: boolean, path: string }> {
-    return await ExpoMeshScannerModule.exportModel(format, options);
+  // Get current scan state
+  getScanState(): { state: string; progress: number; isCompleted: boolean } {
+    return ExpoMeshScannerModule.getScanState();
   },
 
-  // Gestion des événements
-  onMeshUpdate(listener: (event: MeshUpdateEvent) => void) {
-    return emitter.addListener('onMeshUpdated', listener);
+  // Event listeners
+  onScanStateChanged(listener: (event: ScanStateChangedEvent) => void) {
+    return emitter.addListener('onScanStateChanged', listener);
   },
 
-  onImageCaptured(listener: (event: ImageCapturedEvent) => void) {
-    return emitter.addListener('onImageCaptured', listener);
+  onScanProgressUpdate(listener: (event: ScanProgressUpdateEvent) => void) {
+    return emitter.addListener('onScanProgressUpdate', listener);
   },
 
-  onGuidanceUpdate(listener: (event: GuidanceUpdateEvent) => void) {
-    return emitter.addListener('onGuidanceUpdate', listener);
-  },
-
-  onScanComplete(listener: (event: MeshCompleteEvent) => void) {
+  onScanComplete(listener: () => void) {
     return emitter.addListener('onScanComplete', listener);
   },
 
@@ -106,14 +115,13 @@ export default {
     return emitter.addListener('onReconstructionComplete', listener);
   },
 
-  onScanError(listener: (error: any) => void) {
+  onScanError(listener: (event: ScanErrorEvent) => void) {
     return emitter.addListener('onScanError', listener);
   },
 
   removeAllListeners() {
-    emitter.removeAllListeners('onMeshUpdated');
-    emitter.removeAllListeners('onImageCaptured');
-    emitter.removeAllListeners('onGuidanceUpdate');
+    emitter.removeAllListeners('onScanStateChanged');
+    emitter.removeAllListeners('onScanProgressUpdate');
     emitter.removeAllListeners('onScanComplete');
     emitter.removeAllListeners('onReconstructionProgress');
     emitter.removeAllListeners('onReconstructionComplete');

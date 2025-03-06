@@ -1,3 +1,6 @@
+import ExpoModulesCore
+import SwiftUI
+import RealityKit
 import UIKit
 
 // Classe partagée pour les données entre le module et la vue
@@ -8,4 +11,5 @@ public class SharedScannerData {
     public var isScanning = false
 
     private init() {}
+
 }

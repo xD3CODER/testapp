@@ -234,8 +234,9 @@ PODS:
     - ExpoModulesCore
   - ExpoLinking (7.0.5):
     - ExpoModulesCore
-  - ExpoMeshScanner (1.0.0):
+  - ExpoMediaLibrary (17.0.6):
     - ExpoModulesCore
+    - React-Core
   - ExpoModulesCore (2.2.2):
     - DoubleConversion
     - glog
@@ -2018,8 +2019,6 @@ PODS:
     - ReactCommon/turbomodule/core
     - Yoga
   - SocketRocket (0.7.1)
-  - tet (1.0.0):
-    - ExpoModulesCore
   - ViroKit (1.0):
     - React
   - ViroReact (1.0):
@@ -2046,7 +2045,7 @@ DEPENDENCIES:
   - ExpoHead (from `../node_modules/expo-router/ios`)
   - ExpoKeepAwake (from `../node_modules/expo-keep-awake/ios`)
   - ExpoLinking (from `../node_modules/expo-linking/ios`)
-  - ExpoMeshScanner (from `../modules/expo-mesh-scanner/ios`)
+  - ExpoMediaLibrary (from `../node_modules/expo-media-library/ios`)
   - ExpoModulesCore (from `../node_modules/expo-modules-core`)
   - ExpoSplashScreen (from `../node_modules/expo-splash-screen/ios`)
   - ExpoSymbols (from `../node_modules/expo-symbols/ios`)
@@ -2120,7 +2119,6 @@ DEPENDENCIES:
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
   - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNScreens (from `../node_modules/react-native-screens`)
-  - tet (from `../modules/tet/ios`)
   - "ViroKit (from `../node_modules/@reactvision/react-viro/ios/dist/ViroRenderer/`)"
   - "ViroReact (from `../node_modules/@reactvision/react-viro/ios`)"
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
@@ -2168,8 +2166,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-keep-awake/ios"
   ExpoLinking:
     :path: "../node_modules/expo-linking/ios"
-  ExpoMeshScanner:
-    :path: "../modules/expo-mesh-scanner/ios"
+  ExpoMediaLibrary:
+    :path: "../node_modules/expo-media-library/ios"
   ExpoModulesCore:
     :path: "../node_modules/expo-modules-core"
   ExpoSplashScreen:
@@ -2313,8 +2311,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-reanimated"
   RNScreens:
     :path: "../node_modules/react-native-screens"
-  tet:
-    :path: "../modules/tet/ios"
   ViroKit:
     :path: "../node_modules/@reactvision/react-viro/ios/dist/ViroRenderer/"
   ViroReact:
@@ -2342,7 +2338,7 @@ SPEC CHECKSUMS:
   ExpoHead: 5d1c5c20e3933db5d9ca349424cb3b9a4a84b706
   ExpoKeepAwake: b0171a73665bfcefcfcc311742a72a956e6aa680
   ExpoLinking: 8d12bee174ba0cdf31239706578e29e74a417402
-  ExpoMeshScanner: 173e76c82196a793b21c36f8a571e3506854b5ec
+  ExpoMediaLibrary: 2709fc2e4fcf87d28767714abcc603c4bec228c6
   ExpoModulesCore: 7f5e59799b89e5fad1d7cc6070744c1003ca320f
   ExpoSplashScreen: 0f281e3c2ded4757d2309276c682d023c6299c77
   ExpoSymbols: f3002db15156cd4e505c77b6ea1df5c984db9965
@@ -2415,7 +2411,6 @@ SPEC CHECKSUMS:
   RNReanimated: a2692304a6568bc656c04c8ffea812887d37436e
   RNScreens: 351f431ef2a042a1887d4d90e1c1024b8ae9d123
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
-  tet: e54039171df4f845284ca5f57b6de88753fa807c
   ViroKit: 728e2547f4ac693a69fa7652813ec178a361dbd6
   ViroReact: 0fe7ad200cee750209ef1e767f677a90f4736bf0
   Yoga: 90d80701b27946c4b23461c00a7207f300a6ff71
