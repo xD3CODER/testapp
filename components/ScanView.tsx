@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// ScanView.tsx
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,9 +9,9 @@ import {
   Alert,
   Platform,
   SafeAreaView,
+  Dimensions,
 } from 'react-native';
-
-// Import the module from the correct location
+import type { ObjectDimensions } from '../modules/expo-mesh-scanner/src/ExpoMeshScannerModule';
 import MeshScanner from '../modules/expo-mesh-scanner';
 import { ExpoMeshScannerView } from '../modules/expo-mesh-scanner';
 
@@ -20,16 +21,20 @@ interface ScanViewProps {
 }
 
 const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
-  // State
+  // États
   const [deviceSupported, setDeviceSupported] = useState<boolean>(false);
   const [currentState, setCurrentState] = useState<string>('notStarted');
-  const [feedback, setFeedback] = useState<string>('');
-  const [scanCompleted, setScanCompleted] = useState<boolean>(false);
+  const [feedbackMessages, setFeedbackMessages] = useState<string[]>([]);
+  const [objectDimensions, setObjectDimensions] = useState<ObjectDimensions>({
+    width: 0.2,
+    height: 0.2,
+    depth: 0.2,
+  });
   const [reconstructing, setReconstructing] = useState<boolean>(false);
   const [reconstructionProgress, setReconstructionProgress] = useState<number>(0);
   const [reconstructionStage, setReconstructionStage] = useState<string>('');
 
-  // Check device support on mount
+  // Vérifier le support de l'appareil au montage
   useEffect(() => {
     const checkDeviceSupport = async () => {
       try {
@@ -50,36 +55,42 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
     };
 
     checkDeviceSupport();
+
+    // Nettoyer les anciens scans
+    MeshScanner.cleanScanDirectories();
   }, [onClose]);
 
-  // Set up event listeners
+  // Configurer les écouteurs d'événements
   useEffect(() => {
     if (!deviceSupported) return;
 
-    const stateChangedListener = MeshScanner.onScanStateChanged((event) => {
+    // Écouteur d'état
+    const stateListener = MeshScanner.onScanStateChanged((event) => {
       setCurrentState(event.state);
-
-      // Auto-transition for testing (remove in production)
-      if (event.state === 'ready') {
-        setTimeout(() => {
-          MeshScanner.startDetecting().catch(console.error);
-        }, 1000);
-      }
     });
 
-    const progressListener = MeshScanner.onScanProgressUpdate((event) => {
-      setFeedback(event.feedback);
+    // Écouteur de feedback
+    const feedbackListener = MeshScanner.onFeedbackUpdated((event) => {
+      setFeedbackMessages(event.messages);
     });
 
+    // Écouteur de détection d'objet
+    const objectDetectedListener = MeshScanner.onObjectDetected(() => {
+      // L'objet a été détecté, vous pouvez ajouter une logique spécifique ici
+    });
+
+    // Écouteur de fin de scan
     const completeListener = MeshScanner.onScanComplete(() => {
-      setScanCompleted(true);
+      // Le scan est terminé
     });
 
+    // Écouteur de progression de reconstruction
     const reconstructionProgressListener = MeshScanner.onReconstructionProgress((event) => {
       setReconstructionProgress(event.progress);
       setReconstructionStage(event.stage);
     });
 
+    // Écouteur de fin de reconstruction
     const reconstructionCompleteListener = MeshScanner.onReconstructionComplete((event) => {
       setReconstructing(false);
 
@@ -96,23 +107,25 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
       }
     });
 
+    // Écouteur d'erreur
     const errorListener = MeshScanner.onScanError((event) => {
       Alert.alert('Error', event.message);
     });
-    MeshScanner.cleanScanDirectories();
-    // Start scan immediately
+
+    // Démarrer le scan
     MeshScanner.startScan({
+      captureMode: 'object',
       enableOverCapture: true,
-      highQualityMode: true
     }).catch(error => {
       console.error('Failed to start scan:', error);
       Alert.alert('Error', 'Failed to start scanning session');
     });
 
-    // Cleanup
+    // Nettoyage
     return () => {
-      stateChangedListener.remove();
-      progressListener.remove();
+      stateListener.remove();
+      feedbackListener.remove();
+      objectDetectedListener.remove();
       completeListener.remove();
       reconstructionProgressListener.remove();
       reconstructionCompleteListener.remove();
@@ -121,7 +134,23 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
     };
   }, [deviceSupported, onScanComplete]);
 
-  // Render controls based on current state
+  // Fonction pour ajuster les dimensions de l'objet
+  const handleAdjustDimension = async (dimension: 'width' | 'height' | 'depth', delta: number) => {
+    const newDimensions = {
+      ...objectDimensions,
+      [dimension]: Math.max(0.05, (objectDimensions[dimension] || 0) + delta)
+    };
+
+    setObjectDimensions(newDimensions);
+
+    try {
+      await MeshScanner.updateObjectDimensions(newDimensions);
+    } catch (error) {
+      console.error('Failed to update object dimensions:', error);
+    }
+  };
+
+  // Rendu des contrôles selon l'état actuel
   const renderControls = () => {
     if (!deviceSupported) {
       return (
@@ -174,12 +203,15 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
           <View style={styles.controlsContainer}>
             <Text style={styles.stateText}>Ready to scan</Text>
             <Text style={styles.feedbackText}>
-              Position your device to scan the object
+              Center the dot on your object and tap Continue
             </Text>
+            {feedbackMessages.map((msg, index) => (
+              <Text key={index} style={styles.feedbackMessage}>{msg}</Text>
+            ))}
             <TouchableOpacity
               style={styles.button}
               onPress={() => MeshScanner.startDetecting()}>
-              <Text style={styles.buttonText}>Start Detecting</Text>
+              <Text style={styles.buttonText}>Continue</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.cancelButton}
@@ -193,7 +225,95 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
         return (
           <View style={styles.controlsContainer}>
             <Text style={styles.stateText}>Detecting object</Text>
-            <Text style={styles.feedbackText}>{feedback}</Text>
+            <Text style={styles.feedbackText}>
+              Make sure the entire object is inside the box
+            </Text>
+            {feedbackMessages.map((msg, index) => (
+              <Text key={index} style={styles.feedbackMessage}>{msg}</Text>
+            ))}
+
+            {/* Contrôles d'ajustement des dimensions */}
+            <View style={styles.dimensionControls}>
+              <Text style={styles.dimensionTitle}>Adjust Object Size</Text>
+
+              {/* Width */}
+              <View style={styles.dimensionRow}>
+                <Text style={styles.dimensionLabel}>
+                  Width: {objectDimensions.width?.toFixed(2)}m
+                </Text>
+                <View style={styles.dimensionButtons}>
+                  <TouchableOpacity
+                    style={styles.dimensionButton}
+                    onPress={() => handleAdjustDimension('width', 0.05)}>
+                    <Text style={styles.buttonText}>+</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.dimensionButton}
+                    onPress={() => handleAdjustDimension('width', -0.05)}>
+                    <Text style={styles.buttonText}>-</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Height */}
+              <View style={styles.dimensionRow}>
+                <Text style={styles.dimensionLabel}>
+                  Height: {objectDimensions.height?.toFixed(2)}m
+                </Text>
+                <View style={styles.dimensionButtons}>
+                  <TouchableOpacity
+                    style={styles.dimensionButton}
+                    onPress={() => handleAdjustDimension('height', 0.05)}>
+                    <Text style={styles.buttonText}>+</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.dimensionButton}
+                    onPress={() => handleAdjustDimension('height', -0.05)}>
+                    <Text style={styles.buttonText}>-</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Depth */}
+              <View style={styles.dimensionRow}>
+                <Text style={styles.dimensionLabel}>
+                  Depth: {objectDimensions.depth?.toFixed(2)}m
+                </Text>
+                <View style={styles.dimensionButtons}>
+                  <TouchableOpacity
+                    style={styles.dimensionButton}
+                    onPress={() => handleAdjustDimension('depth', 0.05)}>
+                    <Text style={styles.buttonText}>+</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.dimensionButton}
+                    onPress={() => handleAdjustDimension('depth', -0.05)}>
+                    <Text style={styles.buttonText}>-</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => MeshScanner.startCapturing()}>
+              <Text style={styles.buttonText}>Start Capturing</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => MeshScanner.cancelScan().then(onClose)}>
+              <Text style={styles.buttonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        );
+
+      case 'objectDetected':
+        return (
+          <View style={styles.controlsContainer}>
+            <Text style={styles.stateText}>Object Detected</Text>
+            <Text style={styles.feedbackText}>
+              Ready to start capturing
+            </Text>
             <TouchableOpacity
               style={styles.button}
               onPress={() => MeshScanner.startCapturing()}>
@@ -211,22 +331,12 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
         return (
           <View style={styles.controlsContainer}>
             <Text style={styles.stateText}>Capturing...</Text>
-            <Text style={styles.feedbackText}>{feedback}</Text>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => MeshScanner.cancelScan().then(onClose)}>
-              <Text style={styles.buttonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        );
-
-      case 'completed':
-        return (
-          <View style={styles.controlsContainer}>
-            <Text style={styles.stateText}>Scan Completed</Text>
             <Text style={styles.feedbackText}>
-              Review your scan and create a 3D model
+              Move slowly around your object
             </Text>
+            {feedbackMessages.map((msg, index) => (
+              <Text key={index} style={styles.feedbackMessage}>{msg}</Text>
+            ))}
             <TouchableOpacity
               style={styles.button}
               onPress={() => MeshScanner.finishScan()}>
@@ -240,6 +350,7 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
           </View>
         );
 
+      case 'completed':
       case 'processing':
         return (
           <View style={styles.controlsContainer}>
@@ -287,7 +398,9 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
         return (
           <View style={styles.controlsContainer}>
             <Text style={styles.stateText}>State: {currentState}</Text>
-            <Text style={styles.feedbackText}>{feedback}</Text>
+            {feedbackMessages.map((msg, index) => (
+              <Text key={index} style={styles.feedbackMessage}>{msg}</Text>
+            ))}
             <TouchableOpacity
               style={styles.cancelButton}
               onPress={() => MeshScanner.cancelScan().then(onClose)}>
@@ -298,12 +411,13 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
     }
   };
 
+  // Vérification de la compatibilité de la plateforme
   if (Platform.OS !== 'ios' || parseInt(Platform.Version.toString(), 10) < 17) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.incompatibleContainer}>
           <Text style={styles.errorText}>
-            3D Scanning requires iOS 17 or later
+            3D Scanning requires an iOS device with iOS 17 or later.
           </Text>
           <TouchableOpacity style={styles.button} onPress={onClose}>
             <Text style={styles.buttonText}>Close</Text>
@@ -315,12 +429,12 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Main scanner view */}
+      {/* Vue principale du scanner */}
       <View style={styles.scannerContainer}>
         <ExpoMeshScannerView style={styles.scanner} />
       </View>
 
-      {/* Controls overlay */}
+      {/* Superposition des contrôles */}
       {renderControls()}
     </SafeAreaView>
   );
@@ -358,6 +472,12 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     marginBottom: 20,
+    textAlign: 'center',
+  },
+  feedbackMessage: {
+    color: '#FFA500',
+    fontSize: 14,
+    marginBottom: 5,
     textAlign: 'center',
   },
   button: {
@@ -411,6 +531,42 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     marginBottom: 20,
+  },
+  dimensionControls: {
+    width: '100%',
+    marginBottom: 20,
+    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 10,
+  },
+  dimensionTitle: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  dimensionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dimensionLabel: {
+    color: 'white',
+    fontSize: 14,
+  },
+  dimensionButtons: {
+    flexDirection: 'row',
+  },
+  dimensionButton: {
+    backgroundColor: '#2196F3',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
 });
 

@@ -32,18 +32,18 @@ export default function ExploreScreen() {
   };
 
   const handleScanComplete = (modelPath: string, previewPath: string) => {
-    // Add the new model to our collection
-    const newModel = {
-      id: Date.now().toString(),
-      name: `Scan ${scannedModels.length + 1}`,
-      date: new Date().toLocaleDateString(),
-      modelPath,
-      previewPath,
-    };
-
-    setScannedModels([newModel, ...scannedModels]);
-    setIsScanningActive(false);
+  // Ajouter le nouveau modèle à notre collection
+  const newModel = {
+    id: Date.now().toString(),
+    name: `Scan ${scannedModels.length + 1}`,
+    date: new Date().toLocaleDateString(),
+    modelPath,
+    previewPath,
   };
+
+  setScannedModels([newModel, ...scannedModels]);
+  setIsScanningActive(false);
+};
 
   const handleScanClose = () => {
     setIsScanningActive(false);
@@ -157,11 +157,11 @@ export default function ExploreScreen() {
         animationType="slide"
         presentationStyle="fullScreen"
       >
-        <ScanView
-          onScanComplete={handleScanComplete}
-          onClose={handleScanClose}
-        />
-      </Modal>
+      <ScanView
+        onScanComplete={handleScanComplete}
+        onClose={handleScanClose}
+      />
+    </Modal>
     </ScrollView>
   );
 }
