@@ -99,11 +99,11 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
     const errorListener = MeshScanner.onScanError((event) => {
       Alert.alert('Error', event.message);
     });
-
+    MeshScanner.cleanScanDirectories();
     // Start scan immediately
     MeshScanner.startScan({
       enableOverCapture: true,
-      highQualityMode: false
+      highQualityMode: true
     }).catch(error => {
       console.error('Failed to start scan:', error);
       Alert.alert('Error', 'Failed to start scanning session');

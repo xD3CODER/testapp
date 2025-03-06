@@ -129,4 +129,4 @@ export default {
 };
 
 // Export the view component
-export { default as ExpoMeshScannerView } from './src/ExpoMeshScannerView';
+export { default as ExpoMeshScannerView } from './ExpoMeshScannerView';

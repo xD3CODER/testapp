@@ -32,6 +32,14 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+      "expo-build-properties",
+      {
+        "ios": {
+          "deploymentTarget": "17.0"
+        }
+      }
+    ],
      [
       "@reactvision/react-viro",
       {

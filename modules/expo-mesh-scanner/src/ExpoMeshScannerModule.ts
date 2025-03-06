@@ -1,96 +1,39 @@
-// src/ExpoMeshScannerModule.ts
+import { EventEmitter, NativeModulesProxy, requireNativeModule } from 'expo-modules-core';
 
-import { requireNativeModule } from 'expo-modules-core';
+// First, get the native module
+const nativeModule = requireNativeModule('ExpoMeshScanner');
 
-// Interface pour les données d'événements
-export interface MeshUpdateEvent {
-  vertices: number;
-  faces: number;
-  images: number;
-  currentAngle: number;
-}
+// Create the proper EventEmitter to handle the events
+const emitter = new EventEmitter(nativeModule);
 
-export interface ImageCapturedEvent {
-  count: number;
-  angle: number;
-}
+// Create a well-typed JavaScript interface
+export default {
+  // Direct method calls
+  checkSupport: async () => await nativeModule.checkSupport(),
+  startScan: async (options) => await nativeModule.startScan(options),
+  startDetecting: async () => await nativeModule.startDetecting(),
+  startCapturing: async () => await nativeModule.startCapturing(),
+  finishScan: async () => await nativeModule.finishScan(),
+  cancelScan: async () => await nativeModule.cancelScan(),
+  cleanScanDirectories: () => nativeModule.cleanScanDirectories(),
+  reconstructModel: async (options) => await nativeModule.reconstructModel(options),
+  getScanState: () => nativeModule.getScanState(),
 
-export interface GuidanceUpdateEvent {
-  currentAngle: number;
-  imagesRemaining: number;
-  progress: number;
-}
+  // Event listeners (these are the functions that aren't being found)
+  onScanStateChanged: (listener) => emitter.addListener('onScanStateChanged', listener),
+  onScanProgressUpdate: (listener) => emitter.addListener('onScanProgressUpdate', listener),
+  onScanComplete: (listener) => emitter.addListener('onScanComplete', listener),
+  onReconstructionProgress: (listener) => emitter.addListener('onReconstructionProgress', listener),
+  onReconstructionComplete: (listener) => emitter.addListener('onReconstructionComplete', listener),
+  onScanError: (listener) => emitter.addListener('onScanError', listener),
 
-export interface MeshData {
-  vertices: number[];
-  faces: number[];
-  count: number;
-}
-
-export interface ImageData {
-  uri: string;
-  timestamp: number;
-  transform: number[];
-}
-
-export interface MeshCompleteEvent {
-  mesh: MeshData;
-  images: ImageData[];
-  targetObject: { x: number, y: number, width: number, height: number } | null;
-}
-
-export interface SupportInfoEvent {
-  supported: boolean;
-  hasLiDAR: boolean;
-  hasCamera: boolean;
-  reason?: string;
-}
-
-export type CaptureMode = 'manual' | 'auto' | 'guided';
-
-export interface ScanOptions {
-  radius?: number;
-  captureMode?: CaptureMode;
-  captureInterval?: number;
-  angleIncrement?: number;
-  maxImages?: number;
-  targetObject?: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-}
-
-// Nouvelles interfaces pour la reconstruction 3D
-export interface ReconstructionProgressEvent {
-  progress: number;
-  stage: string;
-}
-
-export interface TextureData {
-  uri: string;
-}
-
-export interface ModelData {
-  vertices: number[];
-  normals: number[];
-  uvs: number[];
-  faces: number[];
-  texture: TextureData | null;
-}
-
-export interface ReconstructionCompleteEvent {
-  success: boolean;
-  model?: ModelData;
-  boundingBox?: {
-    min: [number, number, number];
-    max: [number, number, number];
-  };
-  error?: string;
-}
-
-// Récupérer le module natif
-const ExpoMeshScannerModule = requireNativeModule('ExpoMeshScanner');
-
-export default ExpoMeshScannerModule;
+  // Utility to remove all listeners at once
+  removeAllListeners: () => {
+    emitter.removeAllListeners('onScanStateChanged');
+    emitter.removeAllListeners('onScanProgressUpdate');
+    emitter.removeAllListeners('onScanComplete');
+    emitter.removeAllListeners('onReconstructionProgress');
+    emitter.removeAllListeners('onReconstructionComplete');
+    emitter.removeAllListeners('onScanError');
+  }
+};
