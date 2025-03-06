@@ -1,6 +1,5 @@
-// ExpoMeshScannerModule.ts
-import { requireNativeModule } from 'expo-modules-core';
-import { EventEmitter } from 'expo-modules-core';
+// modules/expo-mesh-scanner/index.ts
+import { EventEmitter, requireNativeModule } from 'expo-modules-core';
 
 // Define event data types
 export interface ScanStateChangedEvent {
@@ -128,3 +127,6 @@ export default {
     emitter.removeAllListeners('onScanError');
   }
 };
+
+// Export the view component
+export { default as ExpoMeshScannerView } from './src/ExpoMeshScannerView';

@@ -1,6 +1,6 @@
-// ExpoMeshScannerView.tsx
+// modules/expo-mesh-scanner/src/ExpoMeshScannerView.tsx
 import { requireNativeViewManager } from 'expo-modules-core';
-import React from 'react';
+import * as React from 'react';
 import { ViewProps } from 'react-native';
 
 export interface ExpoMeshScannerViewProps extends ViewProps {
@@ -9,10 +9,9 @@ export interface ExpoMeshScannerViewProps extends ViewProps {
 }
 
 // Get the native view manager
-const NativeView: React.ComponentType<ExpoMeshScannerViewProps> =
-  requireNativeViewManager('ExpoMeshScanner');
+const NativeView = requireNativeViewManager('ExpoMeshScanner');
 
 // Component that wraps the native view
 export default function ExpoMeshScannerView(props: ExpoMeshScannerViewProps) {
-  return <NativeView session={props.session ?? true} style={props.style} />;
+  return <NativeView session={props.session ?? true} style={[{ flex: 1 }, props.style]} />;
 }

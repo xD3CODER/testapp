@@ -325,16 +325,21 @@ public class ExpoMeshScannerModule: Module {
         }
         
         // Define the native view component
-        View(ExpoMeshScannerView.self) {
-            Prop("session") { (view: ExpoMeshScannerView, value: Bool) in
-                if #available(iOS 17.0, *) {
-                    if value {
-                        view.setSession(self.captureSession)
-                    }
-                }
+        ViewManager {
+            // Properly register the view manager with the same name as the module
+            ViewManager.Name("ExpoMeshScanner")
+            
+            // Create the view
+            ViewManager.View { context in
+                ExpoMeshScannerView(appContext: context.appContext)
             }
             
-            // Add any other props as needed
+            // Add session property
+            ViewManager.Prop("session") { (view: ExpoMeshScannerView, value: Bool) in
+                if #available(iOS 17.0, *), value {
+                    view.setSession(self.captureSession)
+                }
+            }
         }
     }
     

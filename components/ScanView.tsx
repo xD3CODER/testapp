@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,8 +10,9 @@ import {
   SafeAreaView,
 } from 'react-native';
 
-import MeshScanner from '../modules/expo-mesh-scanner/src/ExpoMeshScannerModule';
-import ExpoMeshScannerView from '../modules/expo-mesh-scanner/src/ExpoMeshScannerView';
+// Import the module from the correct location
+import MeshScanner from '../modules/expo-mesh-scanner';
+import { ExpoMeshScannerView } from '../modules/expo-mesh-scanner';
 
 interface ScanViewProps {
   onScanComplete?: (modelPath: string, previewPath: string) => void;
@@ -120,57 +121,6 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
     };
   }, [deviceSupported, onScanComplete]);
 
-  // Start the scanning process
-  const handleStartDetecting = async () => {
-    try {
-      await MeshScanner.startDetecting();
-    } catch (error) {
-      console.error('Failed to start detecting:', error);
-    }
-  };
-
-  // Start capturing after object detection
-  const handleStartCapturing = async () => {
-    try {
-      await MeshScanner.startCapturing();
-    } catch (error) {
-      console.error('Failed to start capturing:', error);
-    }
-  };
-
-  // Finish the scan
-  const handleFinishScan = async () => {
-    try {
-      await MeshScanner.finishScan();
-    } catch (error) {
-      console.error('Failed to finish scan:', error);
-    }
-  };
-
-  // Cancel current scan
-  const handleCancelScan = async () => {
-    try {
-      await MeshScanner.cancelScan();
-      if (onClose) onClose();
-    } catch (error) {
-      console.error('Failed to cancel scan:', error);
-    }
-  };
-
-  // Start 3D model reconstruction
-  const handleReconstruct = async () => {
-    try {
-      setReconstructing(true);
-      await MeshScanner.reconstructModel({
-        detailLevel: 'medium'
-      });
-    } catch (error) {
-      setReconstructing(false);
-      console.error('Failed to reconstruct model:', error);
-      Alert.alert('Error', 'Failed to create 3D model');
-    }
-  };
-
   // Render controls based on current state
   const renderControls = () => {
     if (!deviceSupported) {
@@ -202,7 +152,7 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
           <Text style={styles.progressText}>
             {Math.round(reconstructionProgress * 100)}%
           </Text>
-          <TouchableOpacity style={styles.cancelButton} onPress={handleCancelScan}>
+          <TouchableOpacity style={styles.cancelButton} onPress={() => MeshScanner.cancelScan()}>
             <Text style={styles.buttonText}>Cancel</Text>
           </TouchableOpacity>
         </View>
@@ -226,10 +176,14 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
             <Text style={styles.feedbackText}>
               Position your device to scan the object
             </Text>
-            <TouchableOpacity style={styles.button} onPress={handleStartDetecting}>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => MeshScanner.startDetecting()}>
               <Text style={styles.buttonText}>Start Detecting</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelScan}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => MeshScanner.cancelScan().then(onClose)}>
               <Text style={styles.buttonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -240,10 +194,14 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
           <View style={styles.controlsContainer}>
             <Text style={styles.stateText}>Detecting object</Text>
             <Text style={styles.feedbackText}>{feedback}</Text>
-            <TouchableOpacity style={styles.button} onPress={handleStartCapturing}>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => MeshScanner.startCapturing()}>
               <Text style={styles.buttonText}>Start Capturing</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelScan}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => MeshScanner.cancelScan().then(onClose)}>
               <Text style={styles.buttonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -254,7 +212,9 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
           <View style={styles.controlsContainer}>
             <Text style={styles.stateText}>Capturing...</Text>
             <Text style={styles.feedbackText}>{feedback}</Text>
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelScan}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => MeshScanner.cancelScan().then(onClose)}>
               <Text style={styles.buttonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -267,10 +227,14 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
             <Text style={styles.feedbackText}>
               Review your scan and create a 3D model
             </Text>
-            <TouchableOpacity style={styles.button} onPress={handleFinishScan}>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => MeshScanner.finishScan()}>
               <Text style={styles.buttonText}>Finish</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelScan}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => MeshScanner.cancelScan().then(onClose)}>
               <Text style={styles.buttonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -291,10 +255,17 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
             <Text style={styles.feedbackText}>
               Ready to create 3D model
             </Text>
-            <TouchableOpacity style={styles.button} onPress={handleReconstruct}>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => {
+                setReconstructing(true);
+                MeshScanner.reconstructModel({ detailLevel: 'medium' });
+              }}>
               <Text style={styles.buttonText}>Create 3D Model</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelScan}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => MeshScanner.cancelScan().then(onClose)}>
               <Text style={styles.buttonText}>Close</Text>
             </TouchableOpacity>
           </View>
@@ -304,7 +275,9 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
         return (
           <View style={styles.controlsContainer}>
             <Text style={styles.errorText}>An error occurred</Text>
-            <TouchableOpacity style={styles.button} onPress={handleCancelScan}>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => MeshScanner.cancelScan().then(onClose)}>
               <Text style={styles.buttonText}>Close</Text>
             </TouchableOpacity>
           </View>
@@ -315,7 +288,9 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
           <View style={styles.controlsContainer}>
             <Text style={styles.stateText}>State: {currentState}</Text>
             <Text style={styles.feedbackText}>{feedback}</Text>
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelScan}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => MeshScanner.cancelScan().then(onClose)}>
               <Text style={styles.buttonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
