@@ -54,19 +54,57 @@ class ExpoObjectCaptureModuleClass {
   private eventEmitter: NativeEventEmitter;
 
   constructor() {
-    this.nativeModule = requireNativeModule('ExpoObjectCapture');
-    console.log('Native module loaded:', this.nativeModule);
-    console.log('Available methods:', Object.keys(this.nativeModule));
-    this.eventEmitter = new NativeEventEmitter(this.nativeModule);
+    try {
+      this.nativeModule = requireNativeModule('ExpoObjectCapture');
+      console.log('Module natif chargé avec succès');
+      this.eventEmitter = new NativeEventEmitter(this.nativeModule);
+    } catch (error) {
+      console.error('Erreur lors du chargement du module natif:', error);
+      // Créer un substitut si le module natif n'est pas disponible (pour le développement)
+      this.nativeModule = {
+        isSupported: () => false,
+        createCaptureSession: async () => false,
+        attachSessionToView: async () => false,
+        startCapture: async () => ({ success: false }),
+        finishCapture: async () => false,
+        cancelCapture: async () => false,
+        getImageCount: () => 0,
+        getImageCountAsync: async () => 0,
+        setCaptureMode: () => {},
+        getCurrentState: () => 'unsupported',
+        captureComplete: async () => ({ success: false })
+      };
+      // Créer un émetteur d'événements factice
+      this.eventEmitter = {
+        addListener: () => ({ remove: () => {} }),
+        removeAllListeners: () => {}
+      } as any;
+    }
   }
 
   // Méthodes synchrones
   isSupported(): boolean {
-    return true;
+    try {
+      if (this.nativeModule.isSupported) {
+        return this.nativeModule.isSupported();
+      }
+      return false;
+    } catch (error) {
+      console.error('Erreur lors de la vérification du support:', error);
+      return false;
+    }
   }
 
-  getCurrentState(): { state: string } {
-    return { state: 'ready' };
+  getCurrentState(): string {
+    try {
+      if (this.nativeModule.getCurrentState) {
+        return this.nativeModule.getCurrentState();
+      }
+      return 'ready';
+    } catch (error) {
+      console.error('Erreur dans getCurrentState:', error);
+      return 'ready';
+    }
   }
 
   getImageCount(): number {
@@ -76,7 +114,7 @@ class ExpoObjectCaptureModuleClass {
       }
       return 0;
     } catch (error) {
-      console.error('Error in getImageCount:', error);
+      console.error('Erreur dans getImageCount:', error);
       return 0;
     }
   }
@@ -88,7 +126,7 @@ class ExpoObjectCaptureModuleClass {
         this.nativeModule.setCaptureMode(mode);
       }
     } catch (error) {
-      console.error('Error in setCaptureMode:', error);
+      console.error('Erreur dans setCaptureMode:', error);
     }
   }
 
@@ -97,77 +135,68 @@ class ExpoObjectCaptureModuleClass {
     try {
       if (this.nativeModule.createCaptureSession) {
         const sessionCreated = await this.nativeModule.createCaptureSession();
-        console.log('Session created:', sessionCreated);
+        console.log('Session créée:', sessionCreated);
 
         if (sessionCreated) {
           const sessionAttached = await this.nativeModule.attachSessionToView();
-          console.log('Session attached:', sessionAttached);
+          console.log('Session attachée:', sessionAttached);
           return sessionAttached;
         }
         return false;
       } else {
-        console.error('createCaptureSession not available');
+        console.error('createCaptureSession non disponible');
         return false;
       }
     } catch (error) {
-      console.error('Error starting new capture:', error);
+      console.error('Erreur lors du démarrage d\'une nouvelle capture:', error);
       return false;
     }
   }
 
   async startDetecting(): Promise<boolean> {
-    return true; // Fonction stub pour compatibilité
+    return true; // Fonction de compatibilité
   }
 
   async startCapturing(): Promise<boolean> {
-    return true; // Fonction stub pour compatibilité
+    return true; // Fonction de compatibilité
   }
 
   async finishCapture(): Promise<boolean> {
     try {
-      if (this.nativeModule.finishCaptureSession) {
-        return await this.nativeModule.finishCaptureSession();
+      if (this.nativeModule.finishCapture) {
+        return await this.nativeModule.finishCapture();
       }
-      return true;
+      return false;
     } catch (error) {
-      console.error('Error finishing capture:', error);
+      console.error('Erreur lors de la fin de la capture:', error);
       return false;
     }
   }
 
   async cancelCapture(): Promise<boolean> {
     try {
-      if (this.nativeModule.cancelCaptureSession) {
-        return await this.nativeModule.cancelCaptureSession();
+      if (this.nativeModule.cancelCapture) {
+        return await this.nativeModule.cancelCapture();
       }
-      return true;
+      return false;
     } catch (error) {
-      console.error('Error cancelling capture:', error);
+      console.error('Erreur lors de l\'annulation de la capture:', error);
       return false;
     }
   }
 
   async startReconstruction(): Promise<boolean> {
-    return true; // Fonction stub pour compatibilité
+    return true; // Fonction de compatibilité
   }
 
   // Méthode principale pour démarrer la capture
   async startCapture(options?: ObjectCaptureOptions): Promise<ObjectCaptureResult> {
-    if (!this.nativeModule.startCapture || !this.nativeModule.captureComplete) {
-      throw new Error('startCapture or captureComplete not available in native module');
-    }
-
     try {
       // Appeler la méthode native pour démarrer la capture modale
-      this.nativeModule.startCapture(options || {});
-
-      // Attendre que la capture soit terminée
-      const result = await this.nativeModule.captureComplete();
-
-      return result as ObjectCaptureResult;
+      return await this.nativeModule.startCapture(options || {});
     } catch (error) {
-      console.error('Error in startCapture:', error);
-      throw error;
+      console.error('Erreur dans startCapture:', error);
+      return { success: false, error: String(error) };
     }
   }
 
@@ -177,10 +206,10 @@ class ExpoObjectCaptureModuleClass {
       if (this.nativeModule.createCaptureSession) {
         return await this.nativeModule.createCaptureSession();
       }
-      console.error('createCaptureSession not available');
+      console.error('createCaptureSession non disponible');
       return false;
     } catch (error) {
-      console.error('Error in createCaptureSession:', error);
+      console.error('Erreur dans createCaptureSession:', error);
       return false;
     }
   }
@@ -191,10 +220,10 @@ class ExpoObjectCaptureModuleClass {
       if (this.nativeModule.attachSessionToView) {
         return await this.nativeModule.attachSessionToView();
       }
-      console.error('attachSessionToView not available');
+      console.error('attachSessionToView non disponible');
       return false;
     } catch (error) {
-      console.error('Error in attachSessionToView:', error);
+      console.error('Erreur dans attachSessionToView:', error);
       return false;
     }
   }
@@ -207,7 +236,7 @@ class ExpoObjectCaptureModuleClass {
       }
       return this.getImageCount();
     } catch (error) {
-      console.error('Error in getImageCountAsync:', error);
+      console.error('Erreur dans getImageCountAsync:', error);
       return 0;
     }
   }
@@ -254,7 +283,7 @@ export const ObjectCaptureView = requireNativeViewManager('ExpoObjectCapture');
 // Exporter les fonctions individuelles (wrappers autour des méthodes de l'instance)
 export const createCaptureSession = async () => moduleInstance.createCaptureSession();
 export const attachSessionToView = async () => moduleInstance.attachSessionToView();
-export const startCapture = async (options) => moduleInstance.startCapture(options);
+export const startCapture = async (options?: ObjectCaptureOptions) => moduleInstance.startCapture(options);
 export const getImageCountAsync = async () => moduleInstance.getImageCountAsync();
 export const finishCapture = async () => moduleInstance.finishCapture();
-export const cancelCapture = async () => await moduleInstance.cancelCapture();
+export const cancelCapture = async () => moduleInstance.cancelCapture();

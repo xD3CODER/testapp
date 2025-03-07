@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert, Platform } from 'react-native';
 import ExpoObjectCaptureModule, {
   ObjectCaptureView,
   CaptureModeType,
@@ -23,60 +23,82 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
   const [isCapturing, setIsCapturing] = useState(false);
   const [sessionInitialized, setSessionInitialized] = useState(false);
   const [sessionInitializing, setSessionInitializing] = useState(false);
+  const [debugLog, setDebugLog] = useState<string[]>([]);
 
-  // Référence à la vue de capture
-  const viewRef = useRef(null);
+  // Fonction pour ajouter des logs de débogage
+  const addLog = (message: string) => {
+    console.log(message);
+    setDebugLog(prev => [message, ...prev.slice(0, 9)]);
+  };
 
-  // Initialiser la session de capture
-  const initializeCaptureSession = useCallback(async () => {
-    try {
-      console.log("Initialisation de la session de capture...");
-      setSessionInitializing(true);
+  // Initialiser les listeners lors du montage du composant
+  useEffect(() => {
+    addLog("Composant monté - initialisation des listeners");
 
-      // Créer une nouvelle session de capture
-      const success = await createCaptureSession();
-      console.log("Session créée:", success);
+    // Configurer les listeners pour les événements
+    const stateListener = ExpoObjectCaptureModule.addStateChangeListener(event => {
+      addLog(`Changement d'état: ${event.state}`);
+      setState(event.state);
+    });
 
-      if (!success) {
-        console.error("Échec de la création de la session de capture");
-        Alert.alert("Erreur", "Impossible de créer une session de capture");
-        setSessionInitializing(false);
-        return false;
-      }
+    const feedbackListener = ExpoObjectCaptureModule.addFeedbackListener(event => {
+      addLog(`Feedback reçu: ${event.messages.join(', ')}`);
+      setFeedbackMessages(event.messages);
+    });
 
-      // Attacher la session à la vue
-      const attachSuccess = await attachSessionToView();
-      console.log("Session attachée:", attachSuccess);
+    const modelCompleteListener = ExpoObjectCaptureModule.addModelCompleteListener(event => {
+      addLog(`Modèle terminé: ${event.modelPath}`);
+      onComplete(event.modelPath, event.previewPath);
+    });
 
-      if (!attachSuccess) {
-        console.error("Échec de l'attachement de la session à la vue");
-        Alert.alert("Erreur", "Impossible d'attacher la session à la vue");
-        setSessionInitializing(false);
-        return false;
-      }
+    const errorListener = ExpoObjectCaptureModule.addErrorListener(event => {
+      addLog(`Erreur: ${event.message}`);
+      Alert.alert("Erreur", event.message);
+    });
 
-      setSessionInitialized(true);
-      setSessionInitializing(false);
-      return true;
-    } catch (error) {
-      console.error("Erreur lors de l'initialisation de la session:", error);
-      Alert.alert("Erreur", "Une erreur est survenue lors de l'initialisation de la capture");
-      setSessionInitializing(false);
-      return false;
-    }
+    // Nettoyer les ressources
+    return () => {
+      addLog("Démontage du composant - nettoyage des listeners");
+      stateListener?.remove();
+      feedbackListener?.remove();
+      modelCompleteListener?.remove();
+      errorListener?.remove();
+      // Annuler la capture en cours si nécessaire
+      cancelCapture().catch(err => {
+        console.error("Erreur lors de l'annulation de la capture:", err);
+      });
+    };
   }, []);
 
   // Fonction pour lancer une capture modale
   const handleStartModalCapture = useCallback(async () => {
     try {
+      addLog("Démarrage de la capture modale...");
       setIsCapturing(true);
 
+      // Vérifier si iOS 18 est disponible
+      if (Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) < 18) {
+        Alert.alert("Non supporté", "La capture 3D nécessite iOS 18 ou supérieur");
+        setIsCapturing(false);
+        return;
+      }
+
+      // Vérifier si la capture est supportée
+      addLog(`Vérification du support: ${ExpoObjectCaptureModule.isSupported()}`);
+
+      if (!ExpoObjectCaptureModule.isSupported()) {
+        Alert.alert("Non supporté", "La capture d'objets 3D n'est pas supportée sur cet appareil");
+        setIsCapturing(false);
+        return;
+      }
+
       // Utiliser la nouvelle API de capture modale
+      addLog("Appel de la méthode startCapture");
       const result = await startCapture({
         captureMode: CaptureModeType.OBJECT
       });
 
-      console.log("Résultat de la capture:", result);
+      addLog(`Résultat de la capture: ${JSON.stringify(result)}`);
 
       if (result && result.success && result.modelUrl) {
         // Extraction du chemin et du prévisualisation à partir des résultats
@@ -89,10 +111,10 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
         setState('ready');
       }
     } catch (error) {
-      console.error('Erreur lors de la capture:', error);
+      addLog(`Erreur lors de la capture: ${error}`);
       Alert.alert(
         'Erreur de capture',
-        'Une erreur est survenue lors de la capture 3D.'
+        `Une erreur est survenue lors de la capture 3D: ${error}`
       );
       setState('ready');
     } finally {
@@ -103,81 +125,76 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
   // Fonction pour initialiser la vue intégrée
   const handleStartEmbeddedCapture = useCallback(async () => {
     if (!sessionInitialized && !sessionInitializing) {
-      await initializeCaptureSession();
+      addLog("Initialisation de la session intégrée...");
+      setSessionInitializing(true);
+
+      try {
+        // Créer une nouvelle session de capture
+        addLog("Appel de createCaptureSession");
+        const success = await createCaptureSession();
+        addLog(`createCaptureSession résultat: ${success}`);
+
+        if (!success) {
+          Alert.alert("Erreur", "Impossible de créer une session de capture");
+          setSessionInitializing(false);
+          return false;
+        }
+
+        // Attacher la session à la vue
+        addLog("Appel de attachSessionToView");
+        const attachSuccess = await attachSessionToView();
+        addLog(`attachSessionToView résultat: ${attachSuccess}`);
+
+        if (!attachSuccess) {
+          Alert.alert("Erreur", "Impossible d'attacher la session à la vue");
+          setSessionInitializing(false);
+          return false;
+        }
+
+        setSessionInitialized(true);
+        setSessionInitializing(false);
+        return true;
+      } catch (error) {
+        addLog(`Erreur d'initialisation: ${error}`);
+        Alert.alert("Erreur", `Une erreur est survenue lors de l'initialisation de la capture: ${error}`);
+        setSessionInitializing(false);
+        return false;
+      }
     } else {
       Alert.alert("Info", "La session est déjà initialisée ou en cours d'initialisation.");
+      return sessionInitialized;
     }
-  }, [sessionInitialized, sessionInitializing, initializeCaptureSession]);
+  }, [sessionInitialized, sessionInitializing]);
 
   // Fonction pour terminer la capture
   const handleFinishCapture = useCallback(async () => {
     try {
+      addLog("Terminer la capture...");
       setState('prepareToReconstruct');
       const success = await finishCapture();
-      console.log("Capture terminée:", success);
+      addLog(`finishCapture résultat: ${success}`);
 
       if (!success) {
         Alert.alert("Erreur", "Impossible de terminer la capture");
       }
     } catch (error) {
-      console.error('Erreur lors de la fin de la capture:', error);
+      addLog(`Erreur de finalisation: ${error}`);
       Alert.alert(
         'Erreur',
-        'Une erreur est survenue lors de la finalisation de la capture.'
+        `Une erreur est survenue lors de la finalisation de la capture: ${error}`
       );
     }
-  }, []);
-
-  // Initialiser la session quand le composant est monté
-  useEffect(() => {
-    // Mise à jour régulière du nombre d'images
-    const imageCountInterval = setInterval(() => {
-      if (state === 'capturing' && sessionInitialized) {
-        try {
-          const count = ExpoObjectCaptureModule.getImageCount();
-          setImageCount(count);
-        } catch (e) {
-          console.error("Erreur lors de la récupération du nombre d'images:", e);
-        }
-      }
-    }, 1000);
-
-    // Configurer les listeners pour les événements
-    const stateListener = ExpoObjectCaptureModule.addStateChangeListener(event => {
-      console.log("Changement d'état:", event.state);
-      setState(event.state);
-    });
-
-    const feedbackListener = ExpoObjectCaptureModule.addFeedbackListener(event => {
-      console.log("Feedback reçu:", event.messages);
-      setFeedbackMessages(event.messages);
-    });
-
-    // Nettoyer les ressources
-    return () => {
-      clearInterval(imageCountInterval);
-      stateListener?.remove();
-      feedbackListener?.remove();
-      // Annuler la capture en cours si nécessaire
-      cancelCapture().catch(err => {
-        console.error("Erreur lors de l'annulation de la capture:", err);
-      });
-    };
-  }, [state, sessionInitialized]);
-
-  // Gestionnaire d'événement quand la vue est prête
-  const handleViewReady = useCallback(() => {
-    console.log("Vue de capture prête");
   }, []);
 
   // Gérer l'annulation
   const handleCancel = useCallback(async () => {
     try {
+      addLog("Annulation de la capture...");
       const success = await cancelCapture();
-      console.log("Capture annulée:", success);
+      addLog(`cancelCapture résultat: ${success}`);
       onCancel();
     } catch (error) {
-      console.error('Erreur lors de l\'annulation de la capture:', error);
+      addLog(`Erreur d'annulation: ${error}`);
       onCancel();
     }
   }, [onCancel]);
@@ -241,31 +258,12 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
           </>
         );
 
-      case 'prepareToReconstruct':
-        return (
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => {
-              setState('reconstructing');
-            }}>
-            <Text style={styles.buttonText}>Créer le modèle 3D</Text>
-          </TouchableOpacity>
-        );
-
-      case 'reconstructing':
-        return (
-          <View style={styles.progressContainer}>
-            <Text style={styles.progressText}>
-              Reconstruction en cours...
-            </Text>
-            <View style={styles.progressBarContainer}>
-              <View style={[styles.progressBar, { width: '50%' }]} />
-            </View>
-          </View>
-        );
-
       default:
-        return null;
+        return (
+          <Text style={styles.statusText}>
+            État actuel: {state}
+          </Text>
+        );
     }
   };
 
@@ -273,16 +271,22 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
     <SafeAreaView style={styles.container}>
       {/* Vue de capture */}
       <ObjectCaptureView
-        ref={viewRef}
         style={styles.captureView}
         captureMode={CaptureModeType.OBJECT}
-        onViewReady={handleViewReady}
       />
 
       {/* Messages de feedback */}
       <View style={styles.feedbackContainer}>
         {feedbackMessages.map((message, index) => (
           <Text key={index} style={styles.feedbackText}>{message}</Text>
+        ))}
+      </View>
+
+      {/* Logs de débogage */}
+      <View style={styles.debugContainer}>
+        <Text style={styles.debugTitle}>Logs de débogage:</Text>
+        {debugLog.map((log, index) => (
+          <Text key={index} style={styles.debugText}>{log}</Text>
         ))}
       </View>
 
@@ -321,6 +325,27 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     marginBottom: 5,
+  },
+  debugContainer: {
+    position: 'absolute',
+    top: 170,
+    left: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 10,
+    borderRadius: 5,
+    maxHeight: 200,
+  },
+  debugTitle: {
+    color: 'yellow',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  debugText: {
+    color: 'lime',
+    fontSize: 10,
+    marginBottom: 2,
   },
   controlsContainer: {
     position: 'absolute',
@@ -365,17 +390,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textAlign: 'center',
   },
-  progressBarContainer: {
-    height: 8,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: '#2196F3',
-  },
   imageCountText: {
+    color: 'white',
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  statusText: {
     color: 'white',
     fontSize: 16,
     marginBottom: 10,
