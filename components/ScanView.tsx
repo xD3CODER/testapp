@@ -1,441 +1,301 @@
-// ScanView.tsx
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  Platform,
-  SafeAreaView,
-  Dimensions,
-} from 'react-native';
-import type { ObjectDimensions } from '../modules/expo-mesh-scanner/src/ExpoMeshScannerModule';
-import MeshScanner from '../modules/expo-mesh-scanner';
-import { ExpoMeshScannerView } from '../modules/expo-mesh-scanner';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
+import ExpoObjectCaptureModule, {
+  ObjectCaptureView,
+  CaptureModeType,
+  createCaptureSession,
+  attachSessionToView,
+  startCapture,
+  finishCapture,
+  cancelCapture
+} from '../modules/expo-object-capture';
 
-interface ScanViewProps {
-  onScanComplete?: (modelPath: string, previewPath: string) => void;
-  onClose?: () => void;
+interface ScanScreenProps {
+  onComplete: (modelPath: string, previewPath: string) => void;
+  onCancel: () => void;
 }
 
-const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
+const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
   // États
-  const [deviceSupported, setDeviceSupported] = useState<boolean>(false);
-  const [currentState, setCurrentState] = useState<string>('notStarted');
+  const [state, setState] = useState('ready');
   const [feedbackMessages, setFeedbackMessages] = useState<string[]>([]);
-  const [objectDimensions, setObjectDimensions] = useState<ObjectDimensions>({
-    width: 0.2,
-    height: 0.2,
-    depth: 0.2,
-  });
-  const [reconstructing, setReconstructing] = useState<boolean>(false);
-  const [reconstructionProgress, setReconstructionProgress] = useState<number>(0);
-  const [reconstructionStage, setReconstructionStage] = useState<string>('');
+  const [imageCount, setImageCount] = useState(0);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [sessionInitialized, setSessionInitialized] = useState(false);
+  const [sessionInitializing, setSessionInitializing] = useState(false);
 
-  // Vérifier le support de l'appareil au montage
-  useEffect(() => {
-    const checkDeviceSupport = async () => {
-      try {
-        const supportInfo = await MeshScanner.checkSupport();
-        setDeviceSupported(supportInfo.supported);
+  // Référence à la vue de capture
+  const viewRef = useRef(null);
 
-        if (!supportInfo.supported) {
-          Alert.alert(
-            'Device Not Supported',
-            supportInfo.reason || 'Your device does not support 3D scanning',
-            [{ text: 'OK', onPress: onClose }]
-          );
-        }
-      } catch (error) {
-        console.error('Error checking device support:', error);
-        Alert.alert('Error', 'Failed to check device compatibility');
+  // Initialiser la session de capture
+  const initializeCaptureSession = useCallback(async () => {
+    try {
+      console.log("Initialisation de la session de capture...");
+      setSessionInitializing(true);
+
+      // Créer une nouvelle session de capture
+      const success = await createCaptureSession();
+      console.log("Session créée:", success);
+
+      if (!success) {
+        console.error("Échec de la création de la session de capture");
+        Alert.alert("Erreur", "Impossible de créer une session de capture");
+        setSessionInitializing(false);
+        return false;
       }
-    };
 
-    checkDeviceSupport();
+      // Attacher la session à la vue
+      const attachSuccess = await attachSessionToView();
+      console.log("Session attachée:", attachSuccess);
 
-    // Nettoyer les anciens scans
-    MeshScanner.cleanScanDirectories();
-  }, [onClose]);
+      if (!attachSuccess) {
+        console.error("Échec de l'attachement de la session à la vue");
+        Alert.alert("Erreur", "Impossible d'attacher la session à la vue");
+        setSessionInitializing(false);
+        return false;
+      }
 
-  // Configurer les écouteurs d'événements
+      setSessionInitialized(true);
+      setSessionInitializing(false);
+      return true;
+    } catch (error) {
+      console.error("Erreur lors de l'initialisation de la session:", error);
+      Alert.alert("Erreur", "Une erreur est survenue lors de l'initialisation de la capture");
+      setSessionInitializing(false);
+      return false;
+    }
+  }, []);
+
+  // Fonction pour lancer une capture modale
+  const handleStartModalCapture = useCallback(async () => {
+    try {
+      setIsCapturing(true);
+
+      // Utiliser la nouvelle API de capture modale
+      const result = await startCapture({
+        captureMode: CaptureModeType.OBJECT
+      });
+
+      console.log("Résultat de la capture:", result);
+
+      if (result && result.success && result.modelUrl) {
+        // Extraction du chemin et du prévisualisation à partir des résultats
+        const modelPath = result.modelUrl;
+        // Dans le cas où previewPath n'est pas fourni, nous utilisons le même modelUrl
+        const previewPath = result.previewUrl || result.modelUrl;
+
+        onComplete(modelPath, previewPath);
+      } else {
+        setState('ready');
+      }
+    } catch (error) {
+      console.error('Erreur lors de la capture:', error);
+      Alert.alert(
+        'Erreur de capture',
+        'Une erreur est survenue lors de la capture 3D.'
+      );
+      setState('ready');
+    } finally {
+      setIsCapturing(false);
+    }
+  }, [onComplete]);
+
+  // Fonction pour initialiser la vue intégrée
+  const handleStartEmbeddedCapture = useCallback(async () => {
+    if (!sessionInitialized && !sessionInitializing) {
+      await initializeCaptureSession();
+    } else {
+      Alert.alert("Info", "La session est déjà initialisée ou en cours d'initialisation.");
+    }
+  }, [sessionInitialized, sessionInitializing, initializeCaptureSession]);
+
+  // Fonction pour terminer la capture
+  const handleFinishCapture = useCallback(async () => {
+    try {
+      setState('prepareToReconstruct');
+      const success = await finishCapture();
+      console.log("Capture terminée:", success);
+
+      if (!success) {
+        Alert.alert("Erreur", "Impossible de terminer la capture");
+      }
+    } catch (error) {
+      console.error('Erreur lors de la fin de la capture:', error);
+      Alert.alert(
+        'Erreur',
+        'Une erreur est survenue lors de la finalisation de la capture.'
+      );
+    }
+  }, []);
+
+  // Initialiser la session quand le composant est monté
   useEffect(() => {
-    if (!deviceSupported) return;
+    // Mise à jour régulière du nombre d'images
+    const imageCountInterval = setInterval(() => {
+      if (state === 'capturing' && sessionInitialized) {
+        try {
+          const count = ExpoObjectCaptureModule.getImageCount();
+          setImageCount(count);
+        } catch (e) {
+          console.error("Erreur lors de la récupération du nombre d'images:", e);
+        }
+      }
+    }, 1000);
 
-    // Écouteur d'état
-    const stateListener = MeshScanner.onScanStateChanged((event) => {
-      setCurrentState(event.state);
+    // Configurer les listeners pour les événements
+    const stateListener = ExpoObjectCaptureModule.addStateChangeListener(event => {
+      console.log("Changement d'état:", event.state);
+      setState(event.state);
     });
 
-    // Écouteur de feedback
-    const feedbackListener = MeshScanner.onFeedbackUpdated((event) => {
+    const feedbackListener = ExpoObjectCaptureModule.addFeedbackListener(event => {
+      console.log("Feedback reçu:", event.messages);
       setFeedbackMessages(event.messages);
     });
 
-    // Écouteur de détection d'objet
-    const objectDetectedListener = MeshScanner.onObjectDetected(() => {
-      // L'objet a été détecté, vous pouvez ajouter une logique spécifique ici
-    });
-
-    // Écouteur de fin de scan
-    const completeListener = MeshScanner.onScanComplete(() => {
-      // Le scan est terminé
-    });
-
-    // Écouteur de progression de reconstruction
-    const reconstructionProgressListener = MeshScanner.onReconstructionProgress((event) => {
-      setReconstructionProgress(event.progress);
-      setReconstructionStage(event.stage);
-    });
-
-    // Écouteur de fin de reconstruction
-    const reconstructionCompleteListener = MeshScanner.onReconstructionComplete((event) => {
-      setReconstructing(false);
-
-      if (event.success) {
-        Alert.alert(
-          'Scan Complete',
-          'Your 3D model has been created successfully!',
-          [{ text: 'OK' }]
-        );
-
-        if (onScanComplete) {
-          onScanComplete(event.modelPath, event.previewPath);
-        }
-      }
-    });
-
-    // Écouteur d'erreur
-    const errorListener = MeshScanner.onScanError((event) => {
-      Alert.alert('Error', event.message);
-    });
-
-    // Démarrer le scan
-    MeshScanner.startScan({
-      captureMode: 'object',
-      enableOverCapture: true,
-    }).catch(error => {
-      console.error('Failed to start scan:', error);
-      Alert.alert('Error', 'Failed to start scanning session');
-    });
-
-    // Nettoyage
+    // Nettoyer les ressources
     return () => {
-      stateListener.remove();
-      feedbackListener.remove();
-      objectDetectedListener.remove();
-      completeListener.remove();
-      reconstructionProgressListener.remove();
-      reconstructionCompleteListener.remove();
-      errorListener.remove();
-      MeshScanner.removeAllListeners();
+      clearInterval(imageCountInterval);
+      stateListener?.remove();
+      feedbackListener?.remove();
+      // Annuler la capture en cours si nécessaire
+      cancelCapture().catch(err => {
+        console.error("Erreur lors de l'annulation de la capture:", err);
+      });
     };
-  }, [deviceSupported, onScanComplete]);
+  }, [state, sessionInitialized]);
 
-  // Fonction pour ajuster les dimensions de l'objet
-  const handleAdjustDimension = async (dimension: 'width' | 'height' | 'depth', delta: number) => {
-    const newDimensions = {
-      ...objectDimensions,
-      [dimension]: Math.max(0.05, (objectDimensions[dimension] || 0) + delta)
-    };
+  // Gestionnaire d'événement quand la vue est prête
+  const handleViewReady = useCallback(() => {
+    console.log("Vue de capture prête");
+  }, []);
 
-    setObjectDimensions(newDimensions);
-
+  // Gérer l'annulation
+  const handleCancel = useCallback(async () => {
     try {
-      await MeshScanner.updateObjectDimensions(newDimensions);
+      const success = await cancelCapture();
+      console.log("Capture annulée:", success);
+      onCancel();
     } catch (error) {
-      console.error('Failed to update object dimensions:', error);
+      console.error('Erreur lors de l\'annulation de la capture:', error);
+      onCancel();
     }
-  };
+  }, [onCancel]);
 
-  // Rendu des contrôles selon l'état actuel
+  // Rendu des contrôles en fonction de l'état
   const renderControls = () => {
-    if (!deviceSupported) {
+    if (sessionInitializing) {
       return (
-        <View style={styles.controlsContainer}>
-          <Text style={styles.errorText}>
-            This device doesn't support 3D scanning
-          </Text>
-          <TouchableOpacity style={styles.button} onPress={onClose}>
-            <Text style={styles.buttonText}>Close</Text>
-          </TouchableOpacity>
+        <View style={styles.progressContainer}>
+          <Text style={styles.progressText}>Initialisation de la capture...</Text>
         </View>
       );
     }
 
-    if (reconstructing) {
+    if (isCapturing) {
       return (
-        <View style={styles.controlsContainer}>
-          <Text style={styles.stateText}>Creating 3D Model</Text>
-          <Text style={styles.feedbackText}>{reconstructionStage}</Text>
-          <View style={styles.progressBarContainer}>
-            <View
-              style={[
-                styles.progressBar,
-                { width: `${reconstructionProgress * 100}%` }
-              ]}
-            />
-          </View>
-          <Text style={styles.progressText}>
-            {Math.round(reconstructionProgress * 100)}%
-          </Text>
-          <TouchableOpacity style={styles.cancelButton} onPress={() => MeshScanner.cancelScan()}>
-            <Text style={styles.buttonText}>Cancel</Text>
-          </TouchableOpacity>
+        <View style={styles.progressContainer}>
+          <Text style={styles.progressText}>Capture en cours...</Text>
         </View>
       );
     }
 
-    switch (currentState) {
-      case 'notStarted':
-      case 'initializing':
-        return (
-          <View style={styles.controlsContainer}>
-            <ActivityIndicator size="large" color="#ffffff" />
-            <Text style={styles.stateText}>Initializing...</Text>
-          </View>
-        );
-
+    switch (state) {
       case 'ready':
         return (
-          <View style={styles.controlsContainer}>
-            <Text style={styles.stateText}>Ready to scan</Text>
-            <Text style={styles.feedbackText}>
-              Center the dot on your object and tap Continue
-            </Text>
-            {feedbackMessages.map((msg, index) => (
-              <Text key={index} style={styles.feedbackMessage}>{msg}</Text>
-            ))}
+          <>
             <TouchableOpacity
               style={styles.button}
-              onPress={() => MeshScanner.startDetecting()}>
-              <Text style={styles.buttonText}>Continue</Text>
+              onPress={handleStartModalCapture}>
+              <Text style={styles.buttonText}>Démarrer la capture (Modal)</Text>
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => MeshScanner.cancelScan().then(onClose)}>
-              <Text style={styles.buttonText}>Cancel</Text>
+              style={[styles.button, { backgroundColor: '#4CAF50' }]}
+              onPress={handleStartEmbeddedCapture}>
+              <Text style={styles.buttonText}>Initialiser la vue intégrée</Text>
             </TouchableOpacity>
-          </View>
+          </>
         );
 
       case 'detecting':
         return (
-          <View style={styles.controlsContainer}>
-            <Text style={styles.stateText}>Detecting object</Text>
-            <Text style={styles.feedbackText}>
-              Make sure the entire object is inside the box
-            </Text>
-            {feedbackMessages.map((msg, index) => (
-              <Text key={index} style={styles.feedbackMessage}>{msg}</Text>
-            ))}
-
-            {/* Contrôles d'ajustement des dimensions */}
-            <View style={styles.dimensionControls}>
-              <Text style={styles.dimensionTitle}>Adjust Object Size</Text>
-
-              {/* Width */}
-              <View style={styles.dimensionRow}>
-                <Text style={styles.dimensionLabel}>
-                  Width: {objectDimensions.width?.toFixed(2)}m
-                </Text>
-                <View style={styles.dimensionButtons}>
-                  <TouchableOpacity
-                    style={styles.dimensionButton}
-                    onPress={() => handleAdjustDimension('width', 0.05)}>
-                    <Text style={styles.buttonText}>+</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.dimensionButton}
-                    onPress={() => handleAdjustDimension('width', -0.05)}>
-                    <Text style={styles.buttonText}>-</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Height */}
-              <View style={styles.dimensionRow}>
-                <Text style={styles.dimensionLabel}>
-                  Height: {objectDimensions.height?.toFixed(2)}m
-                </Text>
-                <View style={styles.dimensionButtons}>
-                  <TouchableOpacity
-                    style={styles.dimensionButton}
-                    onPress={() => handleAdjustDimension('height', 0.05)}>
-                    <Text style={styles.buttonText}>+</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.dimensionButton}
-                    onPress={() => handleAdjustDimension('height', -0.05)}>
-                    <Text style={styles.buttonText}>-</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Depth */}
-              <View style={styles.dimensionRow}>
-                <Text style={styles.dimensionLabel}>
-                  Depth: {objectDimensions.depth?.toFixed(2)}m
-                </Text>
-                <View style={styles.dimensionButtons}>
-                  <TouchableOpacity
-                    style={styles.dimensionButton}
-                    onPress={() => handleAdjustDimension('depth', 0.05)}>
-                    <Text style={styles.buttonText}>+</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.dimensionButton}
-                    onPress={() => handleAdjustDimension('depth', -0.05)}>
-                    <Text style={styles.buttonText}>-</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => MeshScanner.startCapturing()}>
-              <Text style={styles.buttonText}>Start Capturing</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => MeshScanner.cancelScan().then(onClose)}>
-              <Text style={styles.buttonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        );
-
-      case 'objectDetected':
-        return (
-          <View style={styles.controlsContainer}>
-            <Text style={styles.stateText}>Object Detected</Text>
-            <Text style={styles.feedbackText}>
-              Ready to start capturing
-            </Text>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => MeshScanner.startCapturing()}>
-              <Text style={styles.buttonText}>Start Capturing</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => MeshScanner.cancelScan().then(onClose)}>
-              <Text style={styles.buttonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => {
+              setState('capturing');
+            }}>
+            <Text style={styles.buttonText}>Commencer à capturer</Text>
+          </TouchableOpacity>
         );
 
       case 'capturing':
         return (
-          <View style={styles.controlsContainer}>
-            <Text style={styles.stateText}>Capturing...</Text>
-            <Text style={styles.feedbackText}>
-              Move slowly around your object
+          <>
+            <Text style={styles.imageCountText}>Images: {imageCount}</Text>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={handleFinishCapture}>
+              <Text style={styles.buttonText}>Terminer la capture</Text>
+            </TouchableOpacity>
+          </>
+        );
+
+      case 'prepareToReconstruct':
+        return (
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => {
+              setState('reconstructing');
+            }}>
+            <Text style={styles.buttonText}>Créer le modèle 3D</Text>
+          </TouchableOpacity>
+        );
+
+      case 'reconstructing':
+        return (
+          <View style={styles.progressContainer}>
+            <Text style={styles.progressText}>
+              Reconstruction en cours...
             </Text>
-            {feedbackMessages.map((msg, index) => (
-              <Text key={index} style={styles.feedbackMessage}>{msg}</Text>
-            ))}
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => MeshScanner.finishScan()}>
-              <Text style={styles.buttonText}>Finish</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => MeshScanner.cancelScan().then(onClose)}>
-              <Text style={styles.buttonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        );
-
-      case 'completed':
-      case 'processing':
-        return (
-          <View style={styles.controlsContainer}>
-            <Text style={styles.stateText}>Processing...</Text>
-            <ActivityIndicator size="large" color="#ffffff" />
-          </View>
-        );
-
-      case 'finished':
-        return (
-          <View style={styles.controlsContainer}>
-            <Text style={styles.stateText}>Scan Complete</Text>
-            <Text style={styles.feedbackText}>
-              Ready to create 3D model
-            </Text>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => {
-                setReconstructing(true);
-                MeshScanner.reconstructModel({ detailLevel: 'medium' });
-              }}>
-              <Text style={styles.buttonText}>Create 3D Model</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => MeshScanner.cancelScan().then(onClose)}>
-              <Text style={styles.buttonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        );
-
-      case 'error':
-        return (
-          <View style={styles.controlsContainer}>
-            <Text style={styles.errorText}>An error occurred</Text>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => MeshScanner.cancelScan().then(onClose)}>
-              <Text style={styles.buttonText}>Close</Text>
-            </TouchableOpacity>
+            <View style={styles.progressBarContainer}>
+              <View style={[styles.progressBar, { width: '50%' }]} />
+            </View>
           </View>
         );
 
       default:
-        return (
-          <View style={styles.controlsContainer}>
-            <Text style={styles.stateText}>State: {currentState}</Text>
-            {feedbackMessages.map((msg, index) => (
-              <Text key={index} style={styles.feedbackMessage}>{msg}</Text>
-            ))}
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => MeshScanner.cancelScan().then(onClose)}>
-              <Text style={styles.buttonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        );
+        return null;
     }
   };
 
-  // Vérification de la compatibilité de la plateforme
-  if (Platform.OS !== 'ios' || parseInt(Platform.Version.toString(), 10) < 17) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.incompatibleContainer}>
-          <Text style={styles.errorText}>
-            3D Scanning requires an iOS device with iOS 17 or later.
-          </Text>
-          <TouchableOpacity style={styles.button} onPress={onClose}>
-            <Text style={styles.buttonText}>Close</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container}>
-      {/* Vue principale du scanner */}
-      <View style={styles.scannerContainer}>
-        <ExpoMeshScannerView style={styles.scanner} />
+      {/* Vue de capture */}
+      <ObjectCaptureView
+        ref={viewRef}
+        style={styles.captureView}
+        captureMode={CaptureModeType.OBJECT}
+        onViewReady={handleViewReady}
+      />
+
+      {/* Messages de feedback */}
+      <View style={styles.feedbackContainer}>
+        {feedbackMessages.map((message, index) => (
+          <Text key={index} style={styles.feedbackText}>{message}</Text>
+        ))}
       </View>
 
-      {/* Superposition des contrôles */}
-      {renderControls()}
+      {/* Contrôles */}
+      <View style={styles.controlsContainer}>
+        {renderControls()}
+
+        <TouchableOpacity
+          style={styles.cancelButton}
+          onPress={handleCancel}>
+          <Text style={styles.buttonText}>Annuler</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 };
@@ -443,131 +303,83 @@ const ScanView: React.FC<ScanViewProps> = ({ onScanComplete, onClose }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'black',
   },
-  scannerContainer: {
+  captureView: {
     flex: 1,
   },
-  scanner: {
-    flex: 1,
-  },
-  controlsContainer: {
+  feedbackContainer: {
     position: 'absolute',
-    bottom: 0,
+    top: 100,
     left: 0,
     right: 0,
-    padding: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     alignItems: 'center',
-    borderTopLeftRadius: 15,
-    borderTopRightRadius: 15,
-  },
-  stateText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 15,
   },
   feedbackText: {
     color: 'white',
-    fontSize: 14,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  feedbackMessage: {
-    color: '#FFA500',
-    fontSize: 14,
+    fontSize: 16,
     marginBottom: 5,
-    textAlign: 'center',
+  },
+  controlsContainer: {
+    position: 'absolute',
+    bottom: 30,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    padding: 20,
   },
   button: {
     backgroundColor: '#2196F3',
-    paddingVertical: 12,
+    paddingVertical: 15,
     paddingHorizontal: 30,
     borderRadius: 25,
+    width: 250,
+    alignItems: 'center',
     marginBottom: 10,
-    minWidth: 200,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#F44336',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 25,
-    marginTop: 10,
-    minWidth: 200,
-    alignItems: 'center',
   },
   buttonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
   },
-  errorText: {
-    color: '#FF9800',
-    fontSize: 16,
-    marginBottom: 20,
+  cancelButton: {
+    backgroundColor: '#F44336',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    width: 250,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  progressContainer: {
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 15,
+    borderRadius: 10,
+    width: 300,
+  },
+  progressText: {
+    color: 'white',
+    fontSize: 14,
+    marginBottom: 10,
     textAlign: 'center',
   },
-  incompatibleContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
   progressBarContainer: {
-    width: '100%',
     height: 8,
     backgroundColor: 'rgba(255,255,255,0.3)',
     borderRadius: 4,
     overflow: 'hidden',
-    marginBottom: 10,
   },
   progressBar: {
     height: '100%',
     backgroundColor: '#2196F3',
   },
-  progressText: {
-    color: 'white',
-    fontSize: 14,
-    marginBottom: 20,
-  },
-  dimensionControls: {
-    width: '100%',
-    marginBottom: 20,
-    padding: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 10,
-  },
-  dimensionTitle: {
+  imageCountText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: 'bold',
     marginBottom: 10,
-    textAlign: 'center',
-  },
-  dimensionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  dimensionLabel: {
-    color: 'white',
-    fontSize: 14,
-  },
-  dimensionButtons: {
-    flexDirection: 'row',
-  },
-  dimensionButton: {
-    backgroundColor: '#2196F3',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
+  }
 });
 
-export default ScanView;
+export default ScanScreen;

@@ -1,239 +1,228 @@
 import React, { useState } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Image, Platform, Alert, Modal } from 'react-native';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { Collapsible } from '@/components/Collapsible';
-import { ExternalLink } from '@/components/ExternalLink';
-import ScanView from '@/components/ScanView';
+import { View, Modal, TouchableOpacity, Text, StyleSheet, FlatList, Image } from 'react-native';
+import ScanScreen from '@/components/ScanView';
+
+interface ScannedModel {
+  id: string;
+  name: string;
+  date: string;
+  modelPath: string;
+  previewPath: string;
+}
 
 export default function ExploreScreen() {
-  const [isScanningActive, setIsScanningActive] = useState(false);
-  const [scannedModels, setScannedModels] = useState<
-    Array<{
-      id: string;
-      name: string;
-      date: string;
-      modelPath: string;
-      previewPath: string;
-    }>
-  >([]);
-
-  const startScan = () => {
-    if (Platform.OS !== 'ios' || parseInt(Platform.Version.toString(), 10) < 17) {
-      Alert.alert(
-        'Device Not Supported',
-        '3D Scanning requires an iOS device with iOS 17 or later.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    setIsScanningActive(true);
-  };
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannedModels, setScannedModels] = useState<ScannedModel[]>([]);
+  const [selectedModel, setSelectedModel] = useState<ScannedModel | null>(null);
 
   const handleScanComplete = (modelPath: string, previewPath: string) => {
-  // Ajouter le nouveau modèle à notre collection
-  const newModel = {
-    id: Date.now().toString(),
-    name: `Scan ${scannedModels.length + 1}`,
-    date: new Date().toLocaleDateString(),
-    modelPath,
-    previewPath,
+    const newModel = {
+      id: Date.now().toString(),
+      name: `Scan ${scannedModels.length + 1}`,
+      date: new Date().toLocaleDateString(),
+      modelPath,
+      previewPath
+    };
+
+    setScannedModels([newModel, ...scannedModels]);
+    setShowScanner(false);
+
+    // Optionnel : sélectionner automatiquement le nouveau modèle
+    setSelectedModel(newModel);
   };
 
-  setScannedModels([newModel, ...scannedModels]);
-  setIsScanningActive(false);
-};
-
-  const handleScanClose = () => {
-    setIsScanningActive(false);
-  };
+  const renderModelItem = ({ item }: { item: ScannedModel }) => (
+    <TouchableOpacity
+      style={styles.modelItem}
+      onPress={() => setSelectedModel(item)}
+    >
+      {/* Si previewPath est une URL, vous pouvez essayer de l'afficher */}
+      <View style={styles.previewContainer}>
+        <Text style={styles.previewText}>Aperçu 3D</Text>
+      </View>
+      <View style={styles.modelInfo}>
+        <Text style={styles.modelName}>{item.name}</Text>
+        <Text style={styles.modelDate}>{item.date}</Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
-    <ScrollView>
-      <ThemedView style={styles.container}>
-        <ThemedText type="title">Explore</ThemedText>
+    <View style={styles.container}>
+      <TouchableOpacity
+        style={styles.scanButton}
+        onPress={() => setShowScanner(true)}>
+        <Text style={styles.scanButtonText}>Démarrer un nouveau scan</Text>
+      </TouchableOpacity>
 
-        {/* 3D Scanning Feature */}
-        <ThemedView style={styles.featureCard}>
-          <ThemedText type="subtitle">3D Object Scanner</ThemedText>
-          <ThemedText style={styles.featureDescription}>
-            Create detailed 3D models using the device's camera. Capture objects from multiple angles and convert them into 3D models.
-          </ThemedText>
+      {/* Liste des modèles scannés */}
+      {scannedModels.length > 0 ? (
+        <FlatList
+          data={scannedModels}
+          keyExtractor={(item) => item.id}
+          renderItem={renderModelItem}
+          contentContainerStyle={styles.modelsList}
+        />
+      ) : (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>
+            Aucun modèle 3D capturé pour le moment.
+          </Text>
+          <Text style={styles.emptyStateSubtext}>
+            Appuyez sur le bouton ci-dessus pour scanner un objet.
+          </Text>
+        </View>
+      )}
 
-          <TouchableOpacity
-            style={styles.scanButton}
-            onPress={startScan}
-          >
-            <ThemedText style={styles.scanButtonText}>Start New Scan</ThemedText>
-          </TouchableOpacity>
-        </ThemedView>
-
-        {/* Previously Scanned Models */}
-        {scannedModels.length > 0 && (
-          <>
-            <ThemedText type="subtitle" style={styles.sectionTitle}>Your 3D Models</ThemedText>
-
-            {scannedModels.map(model => (
-              <ThemedView key={model.id} style={styles.modelCard}>
-                <Image
-                  source={{ uri: `file://${model.previewPath}` }}
-                  style={styles.modelPreview}
-                  resizeMode="cover"
-                />
-
-                <View style={styles.modelInfo}>
-                  <ThemedText type="defaultSemiBold">{model.name}</ThemedText>
-                  <ThemedText>{model.date}</ThemedText>
-
-                  <View style={styles.modelButtons}>
-                    <TouchableOpacity
-                      style={styles.modelButton}
-                      onPress={() => {
-                        Alert.alert('View Model', 'Viewing 3D model: ' + model.name);
-                      }}
-                    >
-                      <ThemedText style={styles.modelButtonText}>View</ThemedText>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.modelButton}
-                      onPress={() => {
-                        Alert.alert('Share Model', 'Sharing 3D model: ' + model.name);
-                      }}
-                    >
-                      <ThemedText style={styles.modelButtonText}>Share</ThemedText>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </ThemedView>
-            ))}
-          </>
-        )}
-
-        {/* More Info */}
-        <Collapsible title="About 3D Scanning">
-          <ThemedText>
-            This app uses Apple's Object Capture API to create detailed 3D models from photos.
-            The technology uses photogrammetry to analyze images and construct a 3D representation.
-          </ThemedText>
-
-          <ThemedView style={styles.infoBox}>
-            <ThemedText type="defaultSemiBold">Tips for best results:</ThemedText>
-            <ThemedText>• Ensure good, even lighting</ThemedText>
-            <ThemedText>• Capture from all angles</ThemedText>
-            <ThemedText>• Use a contrasting background</ThemedText>
-            <ThemedText>• Avoid reflective or transparent objects</ThemedText>
-            <ThemedText>• Keep the object centered in frame</ThemedText>
-          </ThemedView>
-
-          <ExternalLink href="https://developer.apple.com/augmented-reality/object-capture/">
-            <ThemedText type="link">Learn more about Object Capture</ThemedText>
-          </ExternalLink>
-        </Collapsible>
-
-        <Collapsible title="Technical Information">
-          <ThemedText>
-            This 3D scanning feature uses RealityKit and Object Capture API introduced in iOS 17.
-            It creates USDZ models that are compatible with AR Quick Look and other 3D viewers.
-          </ThemedText>
-
-          <ThemedText style={{marginTop: 10}}>
-            The scanning process has multiple steps:
-          </ThemedText>
-
-          <ThemedView style={styles.infoBox}>
-            <ThemedText>1. Object detection</ThemedText>
-            <ThemedText>2. Image capture from multiple angles</ThemedText>
-            <ThemedText>3. Photogrammetric processing</ThemedText>
-            <ThemedText>4. 3D model generation with textures</ThemedText>
-          </ThemedView>
-        </Collapsible>
-      </ThemedView>
-
-      {/* Full-screen modal for scanning */}
+      {/* Modal du scanner */}
       <Modal
-        visible={isScanningActive}
+        visible={showScanner}
         animationType="slide"
-        presentationStyle="fullScreen"
+        presentationStyle="fullScreen">
+        <ScanScreen
+          onComplete={handleScanComplete}
+          onCancel={() => setShowScanner(false)}
+        />
+      </Modal>
+
+      {/* Modal pour afficher le modèle sélectionné (à implémenter) */}
+      <Modal
+        visible={!!selectedModel}
+        animationType="slide"
+        onRequestClose={() => setSelectedModel(null)}
       >
-      <ScanView
-        onScanComplete={handleScanComplete}
-        onClose={handleScanClose}
-      />
-    </Modal>
-    </ScrollView>
+        <View style={styles.modelViewerContainer}>
+          <View style={styles.modelViewerHeader}>
+            <Text style={styles.modelViewerTitle}>
+              {selectedModel?.name}
+            </Text>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setSelectedModel(null)}
+            >
+              <Text style={styles.closeButtonText}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Ici, vous pourriez intégrer un visualiseur 3D pour le modèle */}
+          <View style={styles.modelViewerContent}>
+            <Text style={styles.modelPath}>
+              Chemin du modèle: {selectedModel?.modelPath}
+            </Text>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    gap: 16,
-  },
-  featureCard: {
-    padding: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(33, 150, 243, 0.1)',
-    marginVertical: 10,
-  },
-  featureDescription: {
-    marginVertical: 10,
+    padding: 20
   },
   scanButton: {
     backgroundColor: '#2196F3',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingVertical: 15,
+    paddingHorizontal: 30,
     borderRadius: 25,
-    marginTop: 10,
     alignItems: 'center',
+    marginVertical: 20
   },
   scanButtonText: {
     color: 'white',
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: 'bold'
   },
-  sectionTitle: {
-    marginTop: 20,
-    marginBottom: 10,
+  modelsList: {
+    paddingBottom: 20
   },
-  modelCard: {
+  modelItem: {
     flexDirection: 'row',
+    backgroundColor: '#f5f5f5',
     borderRadius: 10,
+    marginVertical: 8,
     overflow: 'hidden',
-    marginBottom: 15,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4
   },
-  modelPreview: {
+  previewContainer: {
     width: 100,
     height: 100,
+    backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  previewText: {
+    color: '#757575',
+    fontSize: 12
   },
   modelInfo: {
     flex: 1,
-    padding: 10,
-    justifyContent: 'space-between',
-  },
-  modelButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 10,
-  },
-  modelButton: {
-    backgroundColor: '#2196F3',
-    paddingVertical: 6,
-    paddingHorizontal: 15,
-    borderRadius: 15,
-    marginLeft: 10,
-  },
-  modelButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  infoBox: {
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
     padding: 15,
-    borderRadius: 8,
-    marginVertical: 10,
+    justifyContent: 'center'
   },
+  modelName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 5
+  },
+  modelDate: {
+    fontSize: 14,
+    color: '#757575'
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 10
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#757575',
+    textAlign: 'center'
+  },
+  modelViewerContainer: {
+    flex: 1,
+    backgroundColor: 'white'
+  },
+  modelViewerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0'
+  },
+  modelViewerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold'
+  },
+  closeButton: {
+    padding: 8
+  },
+  closeButtonText: {
+    color: '#2196F3',
+    fontSize: 16
+  },
+  modelViewerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  modelPath: {
+    fontSize: 14,
+    color: '#757575',
+    textAlign: 'center'
+  }
 });
