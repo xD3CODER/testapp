@@ -20,7 +20,8 @@ struct CapturePrimaryView: View {
         ZStack {
             ObjectCaptureView(session: session,
                               cameraFeedOverlay: { GradientBackground() })
-            .hideObjectReticle(appModel.captureMode == .area)
+        //    .hideObjectReticle(appModel.captureMode == .area)
+            .hideObjectReticle(true)
             .blur(radius: appModel.showOverlaySheets ? 45 : 0)
             .transition(.opacity)
 
@@ -56,4 +57,3 @@ private struct GradientBackground: View {
         .allowsHitTesting(false)
     }
 }
-

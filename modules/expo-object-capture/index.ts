@@ -11,7 +11,10 @@ export {
   startCapture,
   getImageCountAsync,
   finishCapture,
-  cancelCapture
+  cancelCapture,
+    resetDetection,
+    detectObject,
+
 } from './src/ExpoObjectCaptureModule';
 
 // Exporter les types et enums

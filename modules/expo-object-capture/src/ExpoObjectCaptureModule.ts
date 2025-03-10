@@ -72,7 +72,9 @@ class ExpoObjectCaptureModuleClass {
         getImageCountAsync: async () => 0,
         setCaptureMode: () => {},
         getCurrentState: () => 'unsupported',
-        captureComplete: async () => ({ success: false })
+        captureComplete: async () => ({ success: false }),
+        detectObject: async () => false,
+        resetDetection: async () => false,
       };
       // Créer un émetteur d'événements factice
       this.eventEmitter = {
@@ -200,6 +202,30 @@ class ExpoObjectCaptureModuleClass {
     }
   }
 
+  async detectObject(): Promise<boolean> {
+    try {
+      if (this.nativeModule.detectObject) {
+        return await this.nativeModule.detectObject();
+      }
+      return false;
+    } catch (error) {
+      console.error('Erreur lors de la capture detectObject:', error);
+      return false;
+    }
+  }
+
+  async resetDetection(): Promise<boolean> {
+    try {
+      if (this.nativeModule.resetDetection) {
+        return await this.nativeModule.resetDetection();
+      }
+      return false;
+    } catch (error) {
+      console.error('Erreur lors de la capture detectObject:', error);
+      return false;
+    }
+  }
+
   // Créer une session de capture
   async createCaptureSession(): Promise<boolean> {
     try {
@@ -287,3 +313,5 @@ export const startCapture = async (options?: ObjectCaptureOptions) => moduleInst
 export const getImageCountAsync = async () => moduleInstance.getImageCountAsync();
 export const finishCapture = async () => moduleInstance.finishCapture();
 export const cancelCapture = async () => moduleInstance.cancelCapture();
+export const detectObject = async () => moduleInstance.detectObject();
+export const resetDetection = async () => moduleInstance.resetDetection();

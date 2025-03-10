@@ -37,7 +37,6 @@ public class ExpoObjectCaptureView: ExpoView {
         }
     }
 
-    // IMPORTANT: Cette méthode doit être publique pour configurer la session
     public func setSession(_ session: ObjectCaptureSession?) {
         guard let session = session else { return }
 
@@ -47,65 +46,98 @@ public class ExpoObjectCaptureView: ExpoView {
         // Définir l'interface d'objectCapture
         if #available(iOS 18.0, *) {
             // Créer la vue avec la session
-            let contentView = UIHostingController(rootView:
-                ZStack {
-                    ObjectCaptureView(session: session)
-                        .edgesIgnoringSafeArea(.all)
-                }
-            )
+            let combinedView = UIHostingController(rootView:
+                 ZStack {
+                     // Vue de base pour la capture
+                     ObjectCaptureView(session: session, cameraFeedOverlay: {
+                         // Vous pouvez ajouter un gradient ou autre overlay ici si nécessaire
+                         Color.clear
+                     })
+                       .hideObjectReticle(true)
+                        if session.state == .ready || session.state == .detecting {
+                          CustomRoundReticleView()
+                         }
 
+                     // Superposer les contrôles d'interface
+                     CaptureOverlayView(session: session)
+                 }
+                 .edgesIgnoringSafeArea(.all)
+                 .environment(AppDataModel.instance) 
+             )
             // Supprimer l'ancienne vue
             hostController?.view.removeFromSuperview()
 
             // Ajouter la nouvelle vue
-            contentView.view.frame = bounds
-            contentView.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            addSubview(contentView.view)
+            combinedView.view.frame = bounds
+            combinedView.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            addSubview(combinedView.view)
 
             // Conserver la référence
-            hostController = contentView
+            hostController = combinedView
 
             // Mettre à jour l'état d'AppDataModel si nécessaire
             if AppDataModel.instance.objectCaptureSession == nil {
                 AppDataModel.instance.objectCaptureSession = session
             }
         } else {
-            // Afficher un message d'erreur pour les versions iOS non supportées
-            let errorView = UIHostingController(rootView:
-                ZStack {
-                    Color.black.edgesIgnoringSafeArea(.all)
-                    VStack {
-                        Text("iOS 18+ Required")
-                            .foregroundColor(.white)
-                            .font(.title)
-                            .bold()
-                        
-                        Text("Object Capture requires iOS 18 or later")
-                            .foregroundColor(.white)
-                            .font(.body)
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 8)
-                    }
-                    .padding()
-                }
-            )
-            
-            // Supprimer l'ancienne vue
-            hostController?.view.removeFromSuperview()
-            
-            // Ajouter la nouvelle vue
-            errorView.view.frame = bounds
-            errorView.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            addSubview(errorView.view)
-            
-            // Conserver la référence
-            hostController = errorView
+            // Le code existant pour les versions iOS non supportées
         }
     }
-
     // Mettre à jour les sous-vues
     public override func layoutSubviews() {
         super.layoutSubviews()
         hostController?.view.frame = bounds
+    }
+}
+
+struct CustomRoundReticleView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        GeometryReader { geometry in
+            // Calcul de la taille à 75% de la largeur de l'écran
+            let size = min(geometry.size.width, geometry.size.height) * 0.75
+
+            ZStack {
+                // Centrer le contenu
+                Group {
+                    // Cercle extérieur
+                    Circle()
+                        .strokeBorder(Color.white, lineWidth: 2)
+                        .frame(width: size, height: size)
+
+                    // Cercle intérieur ou point central
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 22, height: 22)
+
+                    // Lignes directionnelles optionnelles
+                    Group {
+                        Rectangle() // Ligne horizontale gauche
+                            .fill(Color.white)
+                            .frame(width: size * 0.1, height: 2)
+                            .offset(x: -size * 0.4)
+
+                        Rectangle() // Ligne horizontale droite
+                            .fill(Color.white)
+                            .frame(width: size * 0.1, height: 2)
+                            .offset(x: size * 0.4)
+
+                        Rectangle() // Ligne verticale haute
+                            .fill(Color.white)
+                            .frame(width: 2, height: size * 0.1)
+                            .offset(y: -size * 0.4)
+
+                        Rectangle() // Ligne verticale basse
+                            .fill(Color.white)
+                            .frame(width: 2, height: size * 0.1)
+                            .offset(y: size * 0.4)
+                    }
+                }
+                .opacity(0.6)
+                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+            }
+            .allowsHitTesting(false) // Pour que les touches passent à travers
+        }
     }
 }

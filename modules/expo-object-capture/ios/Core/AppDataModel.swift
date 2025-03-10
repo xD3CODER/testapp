@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for this sample's licensing information.
 
 Abstract:
 A data model for maintaining the app state, including the underlying object capture state as well as any extra app state
@@ -9,6 +9,7 @@ A data model for maintaining the app state, including the underlying object capt
 import RealityKit
 import SwiftUI
 import os
+import ObjectiveC
 
 private let logger = Logger()
 
@@ -34,7 +35,7 @@ class AppDataModel: Identifiable {
     private(set) var photogrammetrySession: PhotogrammetrySession?
 
     /// When we start a new capture, the folder will be set here.
-    private(set) var captureFolderManager: CaptureFolderManager?
+    internal(set) var captureFolderManager: CaptureFolderManager?
 
     /// Shows whether the user decided to skip reconstruction.
     private(set) var isSaveDraftEnabled = false
@@ -90,6 +91,11 @@ class AppDataModel: Identifiable {
 
     // Shows whether the tutorial has played once during a session.
     var tutorialPlayedOnce = false
+
+    // Propriété pour stocker le delegate de feedback
+    private struct FeedbackDelegateKey {
+        static var key = "AppDataModelFeedbackDelegateKey"
+    }
 
     // Postpone creating ObjectCaptureSession and PhotogrammetrySession until necessary.
     private init() {
@@ -310,6 +316,22 @@ extension AppDataModel {
         }
 
         currentFeedback = feedback
+
+        // Notification du delegate avec les messages actuels
+        var currentMessages: [String] = []
+        for thisFeedback in currentFeedback {
+            if let feedbackString = FeedbackMessages.getFeedbackString(for: thisFeedback, captureMode: captureMode) {
+                currentMessages.append(feedbackString)
+            }
+        }
+
+        if let delegate = feedbackDelegate {
+            // Assurez-vous que l'appel se fait sur le thread principal
+            DispatchQueue.main.async {
+                delegate.didUpdateFeedback(messages: currentMessages)
+                print("DEBUG: AppDataModel a notifié le delegate avec messages:", currentMessages)
+            }
+        }
     }
 
     private func performStateTransition(from fromState: ModelState, to toState: ModelState) {

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Apptest",
-    "slug": "Apptest",
+    "name": "3DScanner",
+    "slug": "3DScanner",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,8 +10,8 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.urbendo.Apptest",
-      "infoPlist": {
+      "bundleIdentifier": "com.urbendo.x3DScanner",
+       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
         "NSPhotoLibraryAddUsageDescription": "Allow $(PRODUCT_NAME) to save photos",
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to use your camera",
@@ -24,7 +24,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.urbendo.Apptest"
+      "package": "com.urbendo.x3DScanner"
     },
     "web": {
       "bundler": "metro",
@@ -32,25 +32,6 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      [
-      "expo-build-properties",
-      {
-        "ios": {
-          "deploymentTarget": "18.0"
-        }
-      }
-    ],
-     [
-      "@reactvision/react-viro",
-      {
-        "ios": {
-          "cameraUsagePermission": "$(PRODUCT_NAME) uses your camera for AR experiences. This is a custom InfoPlist string!",
-          "microphoneUsagePermission": "$(PRODUCT_NAME) uses your microphone for AR experiences. This is a custom InfoPlist string!",
-          "photosPermission": "$(PRODUCT_NAME) would like to read photos for AR experiences. This is a custom InfoPlist string!",
-          "savephotosPermission": "$(PRODUCT_NAME) would like to save photos to your library during AR experiences. This is a custom InfoPlist string!"
-        }
-      }
-    ],
       "expo-router",
       [
         "expo-splash-screen",
@@ -61,25 +42,17 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      [
-        "expo-media-library",
-        {
-          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos.",
-          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save photos.",
-          "isAccessMediaLocationEnabled": true
+        [
+      "expo-build-properties",
+      {
+        "ios": {
+          "deploymentTarget": "18.0"
         }
-      ]
+      }
+    ]
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "router": {
-        "origin": false
-      },
-      "eas": {
-        "projectId": "5f06da1d-21b1-414e-9396-f07c3eab47ff"
-      }
     }
   }
 }
