@@ -53,11 +53,24 @@ class ExpoObjectCaptureModuleClass {
   private nativeModule: any;
   private eventEmitter: NativeEventEmitter;
 
+  // Gestion des abonnements d'événements
+  private stateListeners: Set<(event: StateChangeEvent) => void> = new Set();
+  private feedbackListeners: Set<(event: FeedbackEvent) => void> = new Set();
+  private progressListeners: Set<(event: ProgressEvent) => void> = new Set();
+  private modelCompleteListeners: Set<(event: ModelCompleteEvent) => void> = new Set();
+  private errorListeners: Set<(event: ErrorEvent) => void> = new Set();
+
+  // État de connexion aux événements
+  private eventsConnected: boolean = false;
+
   constructor() {
     try {
       this.nativeModule = requireNativeModule('ExpoObjectCapture');
       console.log('Module natif chargé avec succès');
       this.eventEmitter = new NativeEventEmitter(this.nativeModule);
+
+      // Connecter les événements
+      this.connectEvents();
     } catch (error) {
       console.error('Erreur lors du chargement du module natif:', error);
       // Créer un substitut si le module natif n'est pas disponible (pour le développement)
@@ -72,16 +85,50 @@ class ExpoObjectCaptureModuleClass {
         getImageCountAsync: async () => 0,
         setCaptureMode: () => {},
         getCurrentState: () => 'unsupported',
-        captureComplete: async () => ({ success: false }),
         detectObject: async () => false,
         resetDetection: async () => false,
       };
+
       // Créer un émetteur d'événements factice
       this.eventEmitter = {
         addListener: () => ({ remove: () => {} }),
         removeAllListeners: () => {}
       } as any;
     }
+  }
+
+  // Connecter tous les événements natifs
+  private connectEvents() {
+    if (this.eventsConnected) return;
+
+    // Configurer les écouteurs pour tous les types d'événements
+    this.eventEmitter.addListener('onStateChanged', (event) => {
+      console.log('[EventBridge] État changé:', event.state);
+      this.stateListeners.forEach(listener => listener(event));
+    });
+
+    this.eventEmitter.addListener('onFeedbackChanged', (event) => {
+      console.log('[EventBridge] Feedback reçu:', event.messages);
+      this.feedbackListeners.forEach(listener => listener(event));
+    });
+
+    this.eventEmitter.addListener('onProcessingProgress', (event) => {
+      console.log('[EventBridge] Progression:', event.progress, event.stage);
+      this.progressListeners.forEach(listener => listener(event));
+    });
+
+    this.eventEmitter.addListener('onModelComplete', (event) => {
+      console.log('[EventBridge] Modèle terminé:', event.modelPath);
+      this.modelCompleteListeners.forEach(listener => listener(event));
+    });
+
+    this.eventEmitter.addListener('onError', (event) => {
+      console.error('[EventBridge] Erreur:', event.message);
+      this.errorListeners.forEach(listener => listener(event));
+    });
+
+    this.eventsConnected = true;
+    console.log('[EventBridge] Tous les événements sont connectés');
   }
 
   // Méthodes synchrones
@@ -97,7 +144,7 @@ class ExpoObjectCaptureModuleClass {
     }
   }
 
-  getCurrentState(): string {
+ getCurrentState(): string {
     try {
       if (this.nativeModule.getCurrentState) {
         return this.nativeModule.getCurrentState();
@@ -156,11 +203,20 @@ class ExpoObjectCaptureModuleClass {
   }
 
   async startDetecting(): Promise<boolean> {
-    return true; // Fonction de compatibilité
+    try {
+      if (this.nativeModule.detectObject) {
+        return await this.nativeModule.detectObject();
+      }
+      return false;
+    } catch (error) {
+      console.error('Erreur lors de la détection d\'objet:', error);
+      return false;
+    }
   }
 
   async startCapturing(): Promise<boolean> {
-    return true; // Fonction de compatibilité
+    // Cette méthode est laissée pour la compatibilité
+    return true;
   }
 
   async finishCapture(): Promise<boolean> {
@@ -187,8 +243,16 @@ class ExpoObjectCaptureModuleClass {
     }
   }
 
-  async startReconstruction(): Promise<boolean> {
-    return true; // Fonction de compatibilité
+  async resetDetection(): Promise<boolean> {
+    try {
+      if (this.nativeModule.resetDetection) {
+        return await this.nativeModule.resetDetection();
+      }
+      return false;
+    } catch (error) {
+      console.error('Erreur lors de la réinitialisation de la détection:', error);
+      return false;
+    }
   }
 
   // Méthode principale pour démarrer la capture
@@ -199,30 +263,6 @@ class ExpoObjectCaptureModuleClass {
     } catch (error) {
       console.error('Erreur dans startCapture:', error);
       return { success: false, error: String(error) };
-    }
-  }
-
-  async detectObject(): Promise<boolean> {
-    try {
-      if (this.nativeModule.detectObject) {
-        return await this.nativeModule.detectObject();
-      }
-      return false;
-    } catch (error) {
-      console.error('Erreur lors de la capture detectObject:', error);
-      return false;
-    }
-  }
-
-  async resetDetection(): Promise<boolean> {
-    try {
-      if (this.nativeModule.resetDetection) {
-        return await this.nativeModule.resetDetection();
-      }
-      return false;
-    } catch (error) {
-      console.error('Erreur lors de la capture detectObject:', error);
-      return false;
     }
   }
 
@@ -267,33 +307,80 @@ class ExpoObjectCaptureModuleClass {
     }
   }
 
-  // Gestion des écouteurs d'événements
+  // Envoyer un feedback de test (utile pour le débogage)
+  async sendTestFeedback(): Promise<boolean> {
+    try {
+      if (this.nativeModule.sendTestFeedback) {
+        return await this.nativeModule.sendTestFeedback();
+      }
+      return false;
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi du feedback de test:', error);
+      return false;
+    }
+  }
+
+  // Gestion améliorée des écouteurs d'événements
   addStateChangeListener(callback: (event: StateChangeEvent) => void) {
-    return this.eventEmitter.addListener('onStateChanged', callback);
+    this.stateListeners.add(callback);
+    return {
+      remove: () => {
+        this.stateListeners.delete(callback);
+      }
+    };
   }
 
   addFeedbackListener(callback: (event: FeedbackEvent) => void) {
-    return this.eventEmitter.addListener('onFeedbackChanged', callback);
+    this.feedbackListeners.add(callback);
+    return {
+      remove: () => {
+        this.feedbackListeners.delete(callback);
+      }
+    };
   }
 
   addProgressListener(callback: (event: ProgressEvent) => void) {
-    return this.eventEmitter.addListener('onProcessingProgress', callback);
+    this.progressListeners.add(callback);
+    return {
+      remove: () => {
+        this.progressListeners.delete(callback);
+      }
+    };
   }
 
   addModelCompleteListener(callback: (event: ModelCompleteEvent) => void) {
-    return this.eventEmitter.addListener('onModelComplete', callback);
+    this.modelCompleteListeners.add(callback);
+    return {
+      remove: () => {
+        this.modelCompleteListeners.delete(callback);
+      }
+    };
   }
 
   addErrorListener(callback: (event: ErrorEvent) => void) {
-    return this.eventEmitter.addListener('onError', callback);
+    this.errorListeners.add(callback);
+    return {
+      remove: () => {
+        this.errorListeners.delete(callback);
+      }
+    };
   }
 
   removeAllListeners() {
+    this.stateListeners.clear();
+    this.feedbackListeners.clear();
+    this.progressListeners.clear();
+    this.modelCompleteListeners.clear();
+    this.errorListeners.clear();
+
+    // Aussi supprimer les écouteurs natifs
     this.eventEmitter.removeAllListeners('onStateChanged');
     this.eventEmitter.removeAllListeners('onFeedbackChanged');
     this.eventEmitter.removeAllListeners('onProcessingProgress');
     this.eventEmitter.removeAllListeners('onModelComplete');
     this.eventEmitter.removeAllListeners('onError');
+
+    this.eventsConnected = false;
   }
 }
 
@@ -313,5 +400,5 @@ export const startCapture = async (options?: ObjectCaptureOptions) => moduleInst
 export const getImageCountAsync = async () => moduleInstance.getImageCountAsync();
 export const finishCapture = async () => moduleInstance.finishCapture();
 export const cancelCapture = async () => moduleInstance.cancelCapture();
-export const detectObject = async () => moduleInstance.detectObject();
+export const detectObject = async () => moduleInstance.startDetecting();
 export const resetDetection = async () => moduleInstance.resetDetection();

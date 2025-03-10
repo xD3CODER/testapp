@@ -7,8 +7,10 @@ import ExpoObjectCaptureModule, {
   attachSessionToView,
   startCapture,
   finishCapture,
-  cancelCapture
-} from '../modules/expo-object-capture';
+  cancelCapture,
+  detectObject,
+  resetDetection,
+} from '@/modules/expo-object-capture';
 
 interface ScanScreenProps {
   onComplete: (modelPath: string, previewPath: string) => void;
@@ -17,12 +19,11 @@ interface ScanScreenProps {
 
 const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
   // États
-  const [state, setState] = useState('ready');
+  const [state, setState] = useState('initializing');
   const [feedbackMessages, setFeedbackMessages] = useState<string[]>([]);
   const [imageCount, setImageCount] = useState(0);
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [sessionInitialized, setSessionInitialized] = useState(false);
-  const [sessionInitializing, setSessionInitializing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [processingStage, setProcessingStage] = useState<string | undefined>(undefined);
   const [debugLog, setDebugLog] = useState<string[]>([]);
 
   // Fonction pour ajouter des logs de débogage
@@ -31,19 +32,70 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
     setDebugLog(prev => [message, ...prev.slice(0, 9)]);
   };
 
-  // Initialiser les listeners lors du montage du composant
-  useEffect(() => {
-    addLog("Composant monté - initialisation des listeners");
+  // Initialisation de la session de capture
+  const initializeCapture = useCallback(async () => {
+    try {
+      addLog("Initialisation de la session de capture...");
 
+      // Vérifier si iOS 18 est disponible
+      if (Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) < 18) {
+        Alert.alert("Non supporté", "La capture 3D nécessite iOS 18 ou supérieur");
+        onCancel();
+        return;
+      }
+
+      // Vérifier si la capture est supportée
+      if (!ExpoObjectCaptureModule.isSupported()) {
+        Alert.alert("Non supporté", "La capture d'objets 3D n'est pas supportée sur cet appareil");
+        onCancel();
+        return;
+      }
+
+      // Créer la session
+      const sessionCreated = await createCaptureSession();
+      if (!sessionCreated) {
+        throw new Error("Impossible de créer la session de capture");
+      }
+
+      // Attacher la session à la vue
+      const sessionAttached = await attachSessionToView();
+      if (!sessionAttached) {
+        throw new Error("Impossible d'attacher la session à la vue");
+      }
+
+      setState('ready');
+      addLog("Session de capture initialisée avec succès");
+    } catch (error) {
+      addLog(`Erreur d'initialisation: ${error}`);
+      Alert.alert("Erreur", `Impossible d'initialiser la capture: ${error}`);
+      onCancel();
+    }
+  }, [onCancel]);
+
+  // Initialiser les listeners et la capture
+  useEffect(() => {
     // Configurer les listeners pour les événements
     const stateListener = ExpoObjectCaptureModule.addStateChangeListener(event => {
       addLog(`Changement d'état: ${event.state}`);
       setState(event.state);
+
+      // Mettre à jour le compteur d'images automatiquement lors de la capture
+      if (event.state === 'capturing') {
+        ExpoObjectCaptureModule.getImageCountAsync().then(count => {
+          setImageCount(count);
+        });
+      }
     });
 
     const feedbackListener = ExpoObjectCaptureModule.addFeedbackListener(event => {
       addLog(`Feedback reçu: ${event.messages.join(', ')}`);
       setFeedbackMessages(event.messages);
+    });
+
+    const progressListener = ExpoObjectCaptureModule.addProgressListener(event => {
+      addLog(`Progression: ${event.progress.toFixed(2)}${event.stage ? ' - ' + event.stage : ''}`);
+      setProgress(event.progress);
+      setProcessingStage(event.stage);
     });
 
     const modelCompleteListener = ExpoObjectCaptureModule.addModelCompleteListener(event => {
@@ -56,121 +108,52 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
       Alert.alert("Erreur", event.message);
     });
 
+    // Initialiser la capture dès le montage
+    initializeCapture();
+
     // Nettoyer les ressources
     return () => {
       addLog("Démontage du composant - nettoyage des listeners");
       stateListener?.remove();
       feedbackListener?.remove();
+      progressListener?.remove();
       modelCompleteListener?.remove();
       errorListener?.remove();
-      // Annuler la capture en cours si nécessaire
+
+      // Annuler la capture si elle est en cours
       cancelCapture().catch(err => {
         console.error("Erreur lors de l'annulation de la capture:", err);
       });
     };
+  }, [initializeCapture, onComplete, onCancel]);
+
+  // Lancer la détection d'objet
+  const handleDetectObject = useCallback(async () => {
+    try {
+      addLog("Démarrage de la détection d'objet...");
+      const success = await detectObject();
+      addLog(`Résultat de la détection: ${success ? "Réussi" : "Échec"}`);
+    } catch (error) {
+      addLog(`Erreur de détection: ${error}`);
+      Alert.alert("Erreur", `Une erreur est survenue lors de la détection: ${error}`);
+    }
   }, []);
 
-  // Fonction pour lancer une capture modale
-  const handleStartModalCapture = useCallback(async () => {
+  // Réinitialiser la détection
+  const handleResetDetection = useCallback(async () => {
     try {
-      addLog("Démarrage de la capture modale...");
-      setIsCapturing(true);
-
-      // Vérifier si iOS 18 est disponible
-      if (Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) < 18) {
-        Alert.alert("Non supporté", "La capture 3D nécessite iOS 18 ou supérieur");
-        setIsCapturing(false);
-        return;
-      }
-
-      // Vérifier si la capture est supportée
-      addLog(`Vérification du support: ${ExpoObjectCaptureModule.isSupported()}`);
-
-      if (!ExpoObjectCaptureModule.isSupported()) {
-        Alert.alert("Non supporté", "La capture d'objets 3D n'est pas supportée sur cet appareil");
-        setIsCapturing(false);
-        return;
-      }
-
-      // Utiliser la nouvelle API de capture modale
-      addLog("Appel de la méthode startCapture");
-      const result = await startCapture({
-        captureMode: CaptureModeType.OBJECT
-      });
-
-      addLog(`Résultat de la capture: ${JSON.stringify(result)}`);
-
-      if (result && result.success && result.modelUrl) {
-        // Extraction du chemin et du prévisualisation à partir des résultats
-        const modelPath = result.modelUrl;
-        // Dans le cas où previewPath n'est pas fourni, nous utilisons le même modelUrl
-        const previewPath = result.previewUrl || result.modelUrl;
-
-        onComplete(modelPath, previewPath);
-      } else {
-        setState('ready');
-      }
+      addLog("Réinitialisation de la détection...");
+      await resetDetection();
     } catch (error) {
-      addLog(`Erreur lors de la capture: ${error}`);
-      Alert.alert(
-        'Erreur de capture',
-        `Une erreur est survenue lors de la capture 3D: ${error}`
-      );
-      setState('ready');
-    } finally {
-      setIsCapturing(false);
+      addLog(`Erreur de réinitialisation: ${error}`);
+      Alert.alert("Erreur", `Une erreur est survenue lors de la réinitialisation: ${error}`);
     }
-  }, [onComplete]);
+  }, []);
 
-  // Fonction pour initialiser la vue intégrée
-  const handleStartEmbeddedCapture = useCallback(async () => {
-    if (!sessionInitialized && !sessionInitializing) {
-      addLog("Initialisation de la session intégrée...");
-      setSessionInitializing(true);
-
-      try {
-        // Créer une nouvelle session de capture
-        addLog("Appel de createCaptureSession");
-        const success = await createCaptureSession();
-        addLog(`createCaptureSession résultat: ${success}`);
-
-        if (!success) {
-          Alert.alert("Erreur", "Impossible de créer une session de capture");
-          setSessionInitializing(false);
-          return false;
-        }
-
-        // Attacher la session à la vue
-        addLog("Appel de attachSessionToView");
-        const attachSuccess = await attachSessionToView();
-        addLog(`attachSessionToView résultat: ${attachSuccess}`);
-
-        if (!attachSuccess) {
-          Alert.alert("Erreur", "Impossible d'attacher la session à la vue");
-          setSessionInitializing(false);
-          return false;
-        }
-
-        setSessionInitialized(true);
-        setSessionInitializing(false);
-        return true;
-      } catch (error) {
-        addLog(`Erreur d'initialisation: ${error}`);
-        Alert.alert("Erreur", `Une erreur est survenue lors de l'initialisation de la capture: ${error}`);
-        setSessionInitializing(false);
-        return false;
-      }
-    } else {
-      Alert.alert("Info", "La session est déjà initialisée ou en cours d'initialisation.");
-      return sessionInitialized;
-    }
-  }, [sessionInitialized, sessionInitializing]);
-
-  // Fonction pour terminer la capture
+  // Terminer la capture
   const handleFinishCapture = useCallback(async () => {
     try {
       addLog("Terminer la capture...");
-      setState('prepareToReconstruct');
       const success = await finishCapture();
       addLog(`finishCapture résultat: ${success}`);
 
@@ -179,10 +162,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
       }
     } catch (error) {
       addLog(`Erreur de finalisation: ${error}`);
-      Alert.alert(
-        'Erreur',
-        `Une erreur est survenue lors de la finalisation de la capture: ${error}`
-      );
+      Alert.alert('Erreur', `Une erreur est survenue lors de la finalisation de la capture: ${error}`);
     }
   }, []);
 
@@ -199,63 +179,89 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
     }
   }, [onCancel]);
 
-  // Rendu des contrôles en fonction de l'état
-  const renderControls = () => {
-    if (sessionInitializing) {
-      return (
-        <View style={styles.progressContainer}>
-          <Text style={styles.progressText}>Initialisation de la capture...</Text>
-        </View>
-      );
+  // Mise à jour périodique du compteur d'images
+  useEffect(() => {
+    let interval: NodeJS.Timeout | undefined;
+
+    if (state === 'capturing') {
+      interval = setInterval(() => {
+        ExpoObjectCaptureModule.getImageCountAsync().then(count => {
+          setImageCount(count);
+        });
+      }, 1000); // Toutes les secondes
     }
 
-    if (isCapturing) {
-      return (
-        <View style={styles.progressContainer}>
-          <Text style={styles.progressText}>Capture en cours...</Text>
-        </View>
-      );
-    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [state]);
 
+  // Affichage conditionnel en fonction de l'état
+  const renderContent = () => {
     switch (state) {
+      case 'initializing':
+        return (
+          <View style={styles.progressContainer}>
+            <Text style={styles.progressText}>Initialisation de la capture...</Text>
+          </View>
+        );
+
       case 'ready':
         return (
-          <>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={handleStartModalCapture}>
-              <Text style={styles.buttonText}>Démarrer la capture (Modal)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: '#4CAF50' }]}
-              onPress={handleStartEmbeddedCapture}>
-              <Text style={styles.buttonText}>Initialiser la vue intégrée</Text>
-            </TouchableOpacity>
-          </>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handleDetectObject}>
+            <Text style={styles.buttonText}>Détecter l'objet</Text>
+          </TouchableOpacity>
         );
 
       case 'detecting':
         return (
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => {
-              setState('capturing');
-            }}>
-            <Text style={styles.buttonText}>Commencer à capturer</Text>
-          </TouchableOpacity>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={handleResetDetection}>
+              <Text style={styles.buttonText}>Réinitialiser</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: '#4CAF50' }]}
+              onPress={handleDetectObject}>
+              <Text style={styles.buttonText}>Confirmer</Text>
+            </TouchableOpacity>
+          </View>
         );
 
       case 'capturing':
         return (
-          <>
-            <Text style={styles.imageCountText}>Images: {imageCount}</Text>
+          <View style={styles.captureContainer}>
+            <Text style={styles.imageCountText}>Images capturées: {imageCount}</Text>
+
             <TouchableOpacity
-              style={styles.button}
+              style={[styles.button, { backgroundColor: '#4CAF50' }]}
               onPress={handleFinishCapture}>
               <Text style={styles.buttonText}>Terminer la capture</Text>
             </TouchableOpacity>
-          </>
+          </View>
+        );
+
+      case 'finishing':
+      case 'reconstructing':
+        return (
+          <View style={styles.progressContainer}>
+            <Text style={styles.progressText}>
+              {processingStage || "Traitement en cours..."}
+            </Text>
+            <View style={styles.progressBarContainer}>
+              <View
+                style={[
+                  styles.progressBar,
+                  { width: `${Math.max(5, Math.min(100, progress * 100))}%` }
+                ]}
+              />
+            </View>
+            <Text style={styles.progressText}>{Math.round(progress * 100)}%</Text>
+          </View>
         );
 
       default:
@@ -292,13 +298,16 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
 
       {/* Contrôles */}
       <View style={styles.controlsContainer}>
-        {renderControls()}
+        {renderContent()}
 
-        <TouchableOpacity
-          style={styles.cancelButton}
-          onPress={handleCancel}>
-          <Text style={styles.buttonText}>Annuler</Text>
-        </TouchableOpacity>
+        {/* Bouton d'annulation toujours présent */}
+        {['initializing', 'finishing', 'reconstructing'].includes(state) ? null : (
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={handleCancel}>
+            <Text style={styles.buttonText}>Annuler</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -355,12 +364,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '80%',
+  },
+  captureContainer: {
+    alignItems: 'center',
+    width: '100%',
+  },
   button: {
     backgroundColor: '#2196F3',
     paddingVertical: 15,
     paddingHorizontal: 30,
     borderRadius: 25,
-    width: 250,
+    minWidth: 150,
     alignItems: 'center',
     marginBottom: 10,
   },
@@ -374,7 +392,7 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     paddingHorizontal: 30,
     borderRadius: 25,
-    width: 250,
+    width: 150,
     alignItems: 'center',
     marginTop: 10,
   },
@@ -383,6 +401,19 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 10,
     width: 300,
+    alignItems: 'center',
+  },
+  progressBarContainer: {
+    width: '100%',
+    height: 10,
+    backgroundColor: '#444',
+    borderRadius: 5,
+    marginVertical: 10,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#4CAF50',
   },
   progressText: {
     color: 'white',
@@ -392,8 +423,8 @@ const styles = StyleSheet.create({
   },
   imageCountText: {
     color: 'white',
-    fontSize: 16,
-    marginBottom: 10,
+    fontSize: 18,
+    marginBottom: 20,
   },
   statusText: {
     color: 'white',

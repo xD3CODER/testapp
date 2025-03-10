@@ -12,9 +12,8 @@ export {
   getImageCountAsync,
   finishCapture,
   cancelCapture,
-    resetDetection,
-    detectObject,
-
+  resetDetection,
+  detectObject,
 } from './src/ExpoObjectCaptureModule';
 
 // Exporter les types et enums
@@ -39,7 +38,6 @@ export const {
   startNewCapture,
   startDetecting,
   startCapturing,
-  startReconstruction,
   removeAllListeners,
   addStateChangeListener,
   addFeedbackListener,

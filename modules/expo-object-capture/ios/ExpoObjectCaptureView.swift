@@ -80,9 +80,43 @@ public class ExpoObjectCaptureView: ExpoView {
                 AppDataModel.instance.objectCaptureSession = session
             }
         } else {
-            // Le code existant pour les versions iOS non supportées
+            // Code pour les versions iOS non supportées
+            let unsupportedView = UIHostingController(rootView:
+                ZStack {
+                    Color.black.edgesIgnoringSafeArea(.all)
+                    VStack(spacing: 20) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 60, height: 60)
+                            .foregroundColor(.yellow)
+
+                        Text("iOS 18 ou ultérieur requis")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+
+                        Text("La capture d'objets 3D nécessite iOS 18 ou version ultérieure.")
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(.white)
+                    }
+                    .padding()
+                }
+            )
+
+            // Supprimer l'ancienne vue
+            hostController?.view.removeFromSuperview()
+
+            // Ajouter la nouvelle vue
+            unsupportedView.view.frame = bounds
+            unsupportedView.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            addSubview(unsupportedView.view)
+
+            // Conserver la référence
+            hostController = unsupportedView
         }
     }
+
     // Mettre à jour les sous-vues
     public override func layoutSubviews() {
         super.layoutSubviews()
@@ -90,6 +124,7 @@ public class ExpoObjectCaptureView: ExpoView {
     }
 }
 
+// Vue de réticule personnalisée
 struct CustomRoundReticleView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
