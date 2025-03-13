@@ -54,11 +54,7 @@ struct BottomOverlayButtons: View, OverlayButtons {
                     case .detecting:
                         AutoDetectionStateView(session: session)
                     default:
-                        HStack {
-                            Spacer()
-                            AutoCaptureToggle(session: session)
-                            ManualShotButton(session: session)
-                        }
+                    AutoDetectionStateView(session: session)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -383,35 +379,3 @@ private struct NumOfImagesButton: View {
     }
 }
 
-private struct AutoCaptureToggle: View {
-    var session: ObjectCaptureSession
-
-    var body: some View {
-        Button(action: {
-            session.isAutoCaptureEnabled.toggle()
-        }, label: {
-            HStack(spacing: 5) {
-                if session.isAutoCaptureEnabled {
-                    Image(systemName: "a.circle.fill")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 15)
-                        .foregroundStyle(.black)
-                } else {
-                    Image(systemName: "circle.slash.fill")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 15)
-                        .foregroundStyle(.black)
-                }
-                Text("Auto")
-                    .font(.footnote)
-                    .foregroundStyle(.black)
-            }
-            .padding(.all, 5)
-            .background(.ultraThinMaterial)
-            .background(session.isAutoCaptureEnabled ? .white : .clear)
-            .cornerRadius(15)
-        })
-    }
-}

@@ -26,15 +26,15 @@ public class ExpoObjectCaptureEventBridge {
     // Queue pour l'exécution des événements
     private let eventQueue = DispatchQueue(label: "expo.objectcapture.eventQueue", qos: .userInteractive)
 
-    // Maps pour convertir les types natifs en chaînes pour JavaScript
-    private let stateStringMap: [ObjectCaptureSession.CaptureState.Type: String] = [
-        ObjectCaptureSession.CaptureState.initializing.self: "initializing",
-        ObjectCaptureSession.CaptureState.ready.self: "ready",
-        ObjectCaptureSession.CaptureState.detecting.self: "detecting",
-        ObjectCaptureSession.CaptureState.capturing.self: "capturing",
-        ObjectCaptureSession.CaptureState.finishing.self: "finishing",
-        ObjectCaptureSession.CaptureState.completed.self: "completed",
-        ObjectCaptureSession.CaptureState.failed.self: "failed"
+    // Dictionary pour convertir les types natifs en chaînes pour JavaScript
+    private let stateStringMap: [String: String] = [
+        "initializing": "initializing",
+        "ready": "ready",
+        "detecting": "detecting",
+        "capturing": "capturing",
+        "finishing": "finishing",
+        "completed": "completed",
+        "failed": "failed"
     ]
 
     /// Initialisation du bridge d'événements
@@ -90,7 +90,7 @@ public class ExpoObjectCaptureEventBridge {
 
             do {
                 // Utiliser le stream natif de la session pour suivre les mises à jour d'état
-                for await newState in session.stateUpdates {
+                for await newState in await session.stateUpdates {
                     guard !Task.isCancelled else { break }
 
                     // Propager l'état au stream
@@ -125,14 +125,14 @@ public class ExpoObjectCaptureEventBridge {
 
             do {
                 // Utiliser le stream natif de la session pour suivre les mises à jour de feedback
-                for await newFeedback in session.feedbackUpdates {
+                for await newFeedback in await session.feedbackUpdates {
                     guard !Task.isCancelled else { break }
 
                     // Propager le feedback au stream
                     self.feedbackContinuation?.yield(newFeedback)
 
                     // Traiter et envoyer l'événement
-                    self.sendFeedbackChangeEvent(newFeedback)
+                    await self.sendFeedbackChangeEvent(newFeedback)
                 }
             } catch {
                 self.logger.error("Erreur dans le suivi des feedbacks: \(error)")
@@ -171,7 +171,7 @@ public class ExpoObjectCaptureEventBridge {
 
     /// Envoie un événement de changement de feedback à JavaScript
     /// - Parameter feedback: Le nouveau feedback de la session
-    private func sendFeedbackChangeEvent(_ feedback: Set<ObjectCaptureSession.Feedback>) {
+    private func sendFeedbackChangeEvent(_ feedback: Set<ObjectCaptureSession.Feedback>) async  {
         // Ne pas dupliquer les événements si le feedback n'a pas changé
         if lastReportedFeedbackSet == feedback {
             return
@@ -182,8 +182,24 @@ public class ExpoObjectCaptureEventBridge {
         // Convertir le feedback en messages lisibles
         var messages: [String] = []
 
+        // Utiliser le MainActor pour accéder à AppDataModel.instance.captureMode
+        let currentCaptureMode = await MainActor.run { () -> AppDataModel.CaptureMode in
+            return AppDataModel.instance.captureMode
+        }
+
         for item in feedback {
-            if let message = FeedbackMessages.getFeedbackString(for: item, captureMode: AppDataModel.instance.captureMode) {
+            // Attendre la valeur sur le thread principal
+            let semaphore = DispatchSemaphore(value: 0)
+            var feedbackString: String? = nil
+            
+            DispatchQueue.main.async {
+                feedbackString = FeedbackMessages.getFeedbackString(for: item, captureMode: AppDataModel.instance.captureMode)
+                semaphore.signal()
+            }
+            
+            semaphore.wait()
+            
+            if let message = feedbackString {
                 messages.append(message)
             }
         }
@@ -278,13 +294,18 @@ public class ExpoObjectCaptureEventBridge {
     ///   - session: La session de capture
     private func handleCompletionOrFailure(_ state: ObjectCaptureSession.CaptureState, session: ObjectCaptureSession) async {
         // Gérer la complétion
-        if case .completed = state, let captureFolderManager = AppDataModel.instance.captureFolderManager {
-            // Construire les chemins des fichiers
-            let modelPath = captureFolderManager.modelsFolder.appendingPathComponent("model-mobile.usdz").path
-            let previewPath = modelPath
+        if case .completed = state {
+            // Récupérer le captureFolderManager depuis le thread principal
+            let captureFolderManager = await MainActor.run { AppDataModel.instance.captureFolderManager }
+            
+            if let captureFolderManager = captureFolderManager {
+                // Construire les chemins des fichiers
+                let modelPath = captureFolderManager.modelsFolder.appendingPathComponent("model-mobile.usdz").path
+                let previewPath = modelPath
 
-            // Envoyer l'événement de complétion
-            sendModelCompleteEvent(modelPath: modelPath, previewPath: previewPath)
+                // Envoyer l'événement de complétion
+                sendModelCompleteEvent(modelPath: modelPath, previewPath: previewPath)
+            }
         }
 
         // Gérer les erreurs
@@ -359,7 +380,7 @@ extension ExpoObjectCaptureEventBridge {
 
                     case .requestProgressInfo(let request, let progressInfo):
                         if case .modelFile = request {
-                            let stage = progressInfo.processingStage?.processingStageString
+                            let stage = progressInfo.processingStage?.processingStageStringValue
                             self.sendProgressEvent(
                                 progress: Float(1),
                                 stage: stage,
@@ -388,7 +409,7 @@ extension ExpoObjectCaptureEventBridge {
 
 extension PhotogrammetrySession.Output.ProcessingStage {
     /// Convertit l'étape de traitement en chaîne lisible
-    var processingStageString: String? {
+    var processingStageStringValue: String? {
         switch self {
         case .preProcessing:
             return "Preprocessing"

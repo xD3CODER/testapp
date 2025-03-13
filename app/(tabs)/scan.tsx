@@ -1,7 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
-import { Button, XGroup, XStack, YStack } from 'tamagui'
-
 import ExpoObjectCaptureModule, {
   ObjectCaptureView,
   CaptureModeType,
@@ -159,23 +157,14 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
       </View>
       <View style={{flex: 1, flexDirection: "column", justifyContent: "space-between", marginHorizontal: 25}}>
        <View style={{flexDirection: "row", columnGap: 20, justifyContent: "space-between"}}>
-           <Button alignSelf="center" size="$5">
-             Cancel
-          </Button>
-         <Button alignSelf="center" size="$6">
-          Large
-        </Button>
+
         </View>
           <View style={{flexDirection: "row", justifyContent: "center"}}>
              <View style={{bottom: 60}}>
-               <Button alignSelf="center" size="$6" onPress={() => detectObject()}>
-                 Detect object
-              </Button>
+
              </View>
              <View style={{bottom: 60}}>
-               <Button alignSelf="center" size="$6" onPress={() => resetDetection()}>
-                 Cancel detect
-              </Button>
+
              </View>
           </View>
       </View>
@@ -189,6 +178,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
 
       {/* Contenu dynamique */}
       <View style={styles.controlsContainer}>
+
         {renderContent()}
 
         {state === 'capturing' && (

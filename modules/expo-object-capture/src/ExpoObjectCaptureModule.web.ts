@@ -1,19 +1,13 @@
-import { registerWebModule, NativeModule } from 'expo';
+import { EventEmitter } from 'expo-modules-core';
 
-import { ChangeEventPayload } from './ExpoObjectCapture.types';
+const emitter = new EventEmitter({} as any);
 
-type ExpoObjectCaptureModuleEvents = {
-  onChange: (params: ChangeEventPayload) => void;
-}
-
-class ExpoObjectCaptureModule extends NativeModule<ExpoObjectCaptureModuleEvents> {
-  PI = Math.PI;
+export default {
+  PI: Math.PI,
   async setValueAsync(value: string): Promise<void> {
-    this.emit('onChange', { value });
-  }
+    emitter.emit('onChange', { value });
+  },
   hello() {
     return 'Hello world! 👋';
-  }
+  },
 };
-
-export default registerWebModule(ExpoObjectCaptureModule);

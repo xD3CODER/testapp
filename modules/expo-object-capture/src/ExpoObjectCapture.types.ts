@@ -23,7 +23,7 @@ export interface ErrorEvent {
 }
 
 // Types d'événements à passer au module natif
-export interface ExpoObjectCaptureModuleEvents {
+export interface ObjectCaptureModuleEvents {
   onStateChanged: (event: StateChangeEvent) => void;
   onFeedbackChanged: (event: FeedbackEvent) => void;
   onProcessingProgress: (event: ProgressEvent) => void;

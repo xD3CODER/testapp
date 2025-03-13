@@ -48,7 +48,7 @@ export interface ObjectCaptureResult {
 }
 
 // La classe du module natif
-class ExpoObjectCaptureModuleClass {
+class ObjectCaptureModuleClass {
   // Référence au module natif
   private nativeModule: any;
   private eventEmitter: NativeEventEmitter;
@@ -385,7 +385,7 @@ class ExpoObjectCaptureModuleClass {
 }
 
 // Créer une instance unique du module
-const moduleInstance = new ExpoObjectCaptureModuleClass();
+const moduleInstance = new ObjectCaptureModuleClass();
 
 // Exporter l'instance comme module par défaut
 export default moduleInstance;

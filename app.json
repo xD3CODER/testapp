@@ -1,30 +1,28 @@
 {
   "expo": {
-    "name": "3DScanner",
-    "slug": "3DScanner",
+    "name": "yumiam",
+    "slug": "yumiam",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.urbendo.x3DScanner",
-       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
-        "NSPhotoLibraryAddUsageDescription": "Allow $(PRODUCT_NAME) to save photos",
-        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to use your camera",
-        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to use your microphone",
-        "UIRequiredDeviceCapabilities": ["armv7", "arkit"]
-      }
+      "bundleIdentifier": "com.urbendo.yumiam"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.urbendo.x3DScanner"
+      "package": "com.urbendo.yumiam"
     },
     "web": {
       "bundler": "metro",
@@ -33,26 +31,13 @@
     },
     "plugins": [
       "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
-        }
-      ],
-        [
-      "expo-build-properties",
-      {
-        "ios": {
-          "deploymentTarget": "18.0"
-        }
-      }
-    ]
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+     "autolinking": {
+       "nativeModulesDir": "./modules"
     }
   }
 }
