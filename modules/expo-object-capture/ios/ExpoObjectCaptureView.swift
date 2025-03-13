@@ -1,91 +1,71 @@
 import ExpoModulesCore
 import RealityKit
 import SwiftUI
-
 public class ExpoObjectCaptureView: ExpoView {
-    private var hostController: UIViewController?
+    private var hostingController: UIHostingController<AnyView>?
     private var currentSession: ObjectCaptureSession?
-    
-    // Définir l'émetteur d'événements pour onViewReady
+
     let onViewReady = EventDispatcher()
 
     required public init(appContext: AppContext? = nil) {
         super.init(appContext: appContext)
-        setupView()
+        setupInitialView()
     }
 
-    private func setupView() {
-        // Initialiser avec une vue d'attente simple
-        let emptyView = UIHostingController(rootView:
-            ZStack {
-                Color.black.edgesIgnoringSafeArea(.all)
-                Text("En attente de la session de capture...")
-                    .foregroundColor(.white)
-                    .font(.headline)
-            }
+    private func setupInitialView() {
+        let initialView = UIHostingController(rootView:
+            AnyView(
+                ZStack {
+                    Color.black.edgesIgnoringSafeArea(.all)
+                    Text("En attente de la session de capture...")
+                        .foregroundColor(.white)
+                        .font(.headline)
+                }
+            )
         )
 
-        emptyView.view.frame = bounds
-        emptyView.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        addSubview(emptyView.view)
-        hostController = emptyView
+        initialView.view.frame = bounds
+        initialView.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(initialView.view)
+        hostingController = initialView
 
-        // Émettre un événement indiquant que la vue est prête
+        // Signaler que la vue est prête
         DispatchQueue.main.async {
-            // Utiliser l'EventDispatcher pour envoyer l'événement
             self.onViewReady([:])
         }
     }
 
     public func setSession(_ session: ObjectCaptureSession?) {
-        guard let session = session else { return }
+        guard let session = session, #available(iOS 18.0, *) else { return }
 
-        // Stocker la référence à la session
         currentSession = session
-            // Créer la vue avec la session
-            let combinedView = UIHostingController(rootView:
-                 ZStack {
-                     // Vue de base pour la capture
-                     ObjectCaptureView(session: session, cameraFeedOverlay: {
-                         // Vous pouvez ajouter un gradient ou autre overlay ici si nécessaire
-                         Color.clear
-                     })
-                       .hideObjectReticle(true)
-                        if session.state == .ready || session.state == .detecting {
-                          CustomRoundReticleView()
-                         }
 
-                     // Superposer les contrôles d'interface
-                     CaptureOverlayView(session: session)
-                 }
-                 .edgesIgnoringSafeArea(.all)
-                 .environment(AppDataModel.instance) 
-             )
-            // Supprimer l'ancienne vue
-            hostController?.view.removeFromSuperview()
+        // Vue combinée unique, enveloppée dans AnyView
+        let captureView = UIHostingController(rootView:
+            AnyView(
+                ZStack {
+                    ObjectCaptureView(session: session, cameraFeedOverlay: { Color.clear })
+                        .hideObjectReticle(true)
+                    CaptureOverlayView(session: session)
+                }
+                .edgesIgnoringSafeArea(.all)
+                .environment(AppDataModel.instance)
+            )
+        )
 
-            // Ajouter la nouvelle vue
-            combinedView.view.frame = bounds
-            combinedView.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            addSubview(combinedView.view)
-
-            // Conserver la référence
-            hostController = combinedView
-
-            // Mettre à jour l'état d'AppDataModel si nécessaire
-            if AppDataModel.instance.objectCaptureSession == nil {
-                AppDataModel.instance.objectCaptureSession = session
-            }
+        // Remplacer la vue existante
+        hostingController?.view.removeFromSuperview()
+        captureView.view.frame = bounds
+        captureView.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(captureView.view)
+        hostingController = captureView
     }
 
-    // Mettre à jour les sous-vues
     public override func layoutSubviews() {
         super.layoutSubviews()
-        hostController?.view.frame = bounds
+        hostingController?.view.frame = bounds
     }
 }
-
-// Vue de réticule personnalisée
 struct CustomRoundReticleView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -137,3 +117,6 @@ struct CustomRoundReticleView: View {
         }
     }
 }
+
+
+//force refresh

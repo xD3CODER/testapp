@@ -22,6 +22,28 @@ export interface ErrorEvent {
   message: string;
 }
 
+// Interface pour les options de configuration
+export interface ObjectCaptureOptions {
+  captureMode?: CaptureModeType;
+  [key: string]: any;
+}
+
+// Interface pour les résultats de la capture
+export interface ObjectCaptureResult {
+  success: boolean;
+  modelUrl?: string;
+  previewUrl?: string;
+  imageCount?: number;
+  timestamp?: number;
+  [key: string]: any;
+}
+
+// Enum pour les modes de capture
+export enum CaptureModeType {
+  OBJECT = 'object',
+  AREA = 'area'
+}
+
 // Types d'événements à passer au module natif
 export interface ObjectCaptureModuleEvents {
   onStateChanged: (event: StateChangeEvent) => void;

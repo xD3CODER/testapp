@@ -36,8 +36,6 @@ yarn-error.*
 *.tsbuildinfo
 
 .idea/
-/ios
-/android/
 # Expo
 .expo
 dist/

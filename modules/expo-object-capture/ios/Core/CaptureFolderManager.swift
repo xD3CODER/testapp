@@ -65,32 +65,48 @@ class CaptureFolderManager {
     // Contains Images and Checkpoint subdirectories.
     //
     // - Returns: the created folder's file URL, else nil on error.
-    private static func createNewCaptureDirectory() -> URL? {
-        // Set the Info.plist to allow sharing so the app documents directory is visible
-        // from the Files app for viewing, deleting, and sharing with AirDrop, Mail, iCloud, etc to move
-        // the folder to the engine macOS platform.
-        let formatter = ISO8601DateFormatter()
-        let timestamp = formatter.string(from: Date())
-        let newCaptureDir = URL.documentsDirectory
-            .appendingPathComponent(timestamp, isDirectory: true)
+    // Dans CaptureFolderManager.swift, modifiez la méthode createNewCaptureDirectory
 
-        logger.log("Creating capture path: \"\(String(describing: newCaptureDir))\"")
-        let capturePath = newCaptureDir.path
-        do {
-            try FileManager.default.createDirectory(atPath: capturePath,
-                                                    withIntermediateDirectories: true)
-        } catch {
-            logger.error("Failed to create capturepath=\"\(capturePath)\" error=\(String(describing: error))")
-            return nil
-        }
-        var isDir: ObjCBool = false
-        let exists = FileManager.default.fileExists(atPath: capturePath, isDirectory: &isDir)
-        guard exists && isDir.boolValue else {
-            return nil
-        }
+private static func createNewCaptureDirectory() -> URL? {
+    // Format de date avec millisecondes
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let timestamp = formatter.string(from: Date())
 
-        return newCaptureDir
+    // Ajouter un identifiant unique pour garantir l'unicité
+    let uniqueID = UUID().uuidString.prefix(8)
+    let folderName = "\(timestamp)-\(uniqueID)"
+
+    let newCaptureDir = URL.documentsDirectory
+        .appendingPathComponent(folderName, isDirectory: true)
+
+    logger.log("Creating capture path: \"\(String(describing: newCaptureDir))\"")
+
+    // Vérifier d'abord si le dossier existe déjà
+    if FileManager.default.fileExists(atPath: newCaptureDir.path) {
+        logger.error("Folder already exists at path: \(newCaptureDir.path)")
+        return nil
     }
+
+    let capturePath = newCaptureDir.path
+    do {
+        try FileManager.default.createDirectory(atPath: capturePath,
+                                               withIntermediateDirectories: true)
+    } catch {
+        logger.error("Failed to create capturepath=\"\(capturePath)\" error=\(String(describing: error))")
+        return nil
+    }
+
+    // Vérification supplémentaire
+    var isDir: ObjCBool = false
+    let exists = FileManager.default.fileExists(atPath: capturePath, isDirectory: &isDir)
+    guard exists && isDir.boolValue else {
+        logger.error("Directory creation check failed for: \(capturePath)")
+        return nil
+    }
+
+    return newCaptureDir
+}
 
     // Creates all path components until it exists, else throws.
     // Throws if the file already exists as well.

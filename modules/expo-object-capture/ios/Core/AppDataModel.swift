@@ -157,6 +157,20 @@ class AppDataModel: Identifiable {
 }
 
 extension AppDataModel {
+ private struct AssociatedKeys {
+        // Vos clés existantes...
+        static var expoModuleKey = "AppDataModelExpoModuleKey"
+    }
+
+    // Propriété pour stocker la référence au module
+    var expoModule: AnyObject? {
+        get {
+            return objc_getAssociatedObject(self, &AssociatedKeys.expoModuleKey) as? AnyObject
+        }
+        set {
+            objc_setAssociatedObject(self, &AssociatedKeys.expoModuleKey, newValue, .OBJC_ASSOCIATION_ASSIGN)
+        }
+    }
     private func attachListeners() {
         logger.debug("Attaching listeners...")
         guard let model = objectCaptureSession else {
@@ -276,6 +290,23 @@ extension AppDataModel {
 
     private func onStateChanged(newState: ObjectCaptureSession.CaptureState) {
         logger.info("OCViewModel switched to state: \(String(describing: newState))")
+
+        // Convertir l'état en chaîne et envoyer l'événement
+        let stateString: String
+        switch newState {
+        case .initializing: stateString = "initializing"
+        case .ready: stateString = "ready"
+        case .detecting: stateString = "detecting"
+        case .capturing: stateString = "capturing"
+        case .finishing: stateString = "finishing"
+        case .completed: stateString = "completed"
+        case .failed(let error):
+            stateString = "failed"
+            sendEventToJS("onError", ["message": "\(error)"])
+        @unknown default: stateString = "unknown"
+        }
+
+        // Le reste de votre code existant...
         if case .completed = newState {
             logger.log("ObjectCaptureSession moved in .completed state.")
             if isSaveDraftEnabled {
@@ -292,10 +323,23 @@ extension AppDataModel {
             } else {
                 switchToErrorState(error: error)
             }
+        } else {
+         print("sending state event to JS ", stateString)
+        // Envoyer l'événement d'état
+        sendEventToJS("onStateChanged", ["state": stateString])
+        }
+    }
+      func sendEventToJS(_ eventName: String, _ body: [String: Any]) {
+        guard let module = expoModule as? ExpoObjectCaptureModule else { return }
+
+        DispatchQueue.main.async {
+            module.sendEvent(eventName, body)
         }
     }
 
-    private func updateFeedbackMessages(for feedback: Set<Feedback>) {
+   private func updateFeedbackMessages(for feedback: Set<Feedback>) {
+        // Votre code existant...
+
         // Compare the incoming feedback with the previous feedback to find the intersection.
         let persistentFeedback = currentFeedback.intersection(feedback)
 
@@ -325,13 +369,30 @@ extension AppDataModel {
             }
         }
 
+        // Envoyer l'événement de feedback à JavaScript
+        sendEventToJS("onFeedbackChanged", ["messages": currentMessages])
+
+        // Toujours appeler le delegate si nécessaire
         if let delegate = feedbackDelegate {
-            // Assurez-vous que l'appel se fait sur le thread principal
             DispatchQueue.main.async {
                 delegate.didUpdateFeedback(messages: currentMessages)
-                print("DEBUG: AppDataModel a notifié le delegate avec messages:", currentMessages)
             }
         }
+    }
+
+     func sendReconstructionProgress(progress: Double, stage: String? = nil) {
+        var eventBody: [String: Any] = ["progress": progress]
+        if let stage = stage {
+            eventBody["stage"] = stage
+        }
+        sendEventToJS("onProcessingProgress", eventBody)
+    }
+
+    func sendModelComplete(modelPath: String, previewPath: String) {
+        sendEventToJS("onModelComplete", [
+            "modelPath": modelPath,
+            "previewPath": previewPath
+        ])
     }
 
     private func performStateTransition(from fromState: ModelState, to toState: ModelState) {

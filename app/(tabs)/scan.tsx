@@ -1,32 +1,43 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
-import ExpoObjectCaptureModule, {
+import React, {useEffect, useState, useCallback, Suspense, lazy, useMemo} from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import { useRouter, Stack } from 'expo-router';
+import {
   ObjectCaptureView,
   CaptureModeType,
+  eventEmitter,
+    addFeedbackListener,
+    addStateChangeListener,
   createCaptureSession,
   attachSessionToView,
   finishCapture,
   cancelCapture,
-    detectObject,
-    resetDetection,
+  detectObject,
+  resetDetection,
+  getImageCount
 } from '@/modules/expo-object-capture';
 
-interface ScanScreenProps {
-  onComplete: (modelPath: string, previewPath: string) => void;
-  onCancel: () => void;
-}
+// Composant de chargement
+const LoadingScreen = () => (
+  <View style={styles.loadingContainer}>
+    <ActivityIndicator size="large" color="#2196F3" />
+    <Text style={styles.loadingText}>Initialisation de la caméra...</Text>
+  </View>
+);
 
-const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
-  const [state, setState] = useState('initializing');
+export default function ScanScreen() {
+  const router = useRouter();
+  const [state, setState] = useState<string>('initializing');
   const [feedbackMessages, setFeedbackMessages] = useState<string[]>([]);
   const [imageCount, setImageCount] = useState(0);
   const [debugLog, setDebugLog] = useState<string[]>([]);
+  const [showDebug, setShowDebug] = useState(false);
+  const [isComponentReady, setIsComponentReady] = useState(false);
 
   // Fonction pour ajouter des logs de débogage
-  const addLog = (message: string) => {
-    console.log(message);
-    setDebugLog(prev => [message, ...prev.slice(0, 9)]);
-  };
+  const addLog = useCallback((message: string) => {
+    console.log(message); // Toujours afficher dans la console
+    setDebugLog(prev => [message, ...prev.slice(0, 19)]);
+  }, []);
 
   // Initialisation de la session de capture
   const initializeCapture = useCallback(async () => {
@@ -35,72 +46,42 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
 
       // Créer la session
       const sessionCreated = await createCaptureSession();
+      addLog(`Session créée: ${sessionCreated}`);
+
       if (!sessionCreated) {
         throw new Error("Impossible de créer la session de capture");
       }
 
       // Attacher la session à la vue
       const sessionAttached = await attachSessionToView();
+      addLog(`Session attachée: ${sessionAttached}`);
+
       if (!sessionAttached) {
         throw new Error("Impossible d'attacher la session à la vue");
       }
 
-      // Démarrer la capture automatiquement
-      setState('detecting');
-
+      // Indiquer que le composant est prêt
+      setIsComponentReady(true);
       addLog("Session de capture initialisée avec succès");
+
     } catch (error) {
       addLog(`Erreur d'initialisation: ${error}`);
       Alert.alert("Erreur", `Impossible d'initialiser la capture: ${error}`);
-      onCancel();
+      handleCancel();
     }
-  }, [onCancel]);
+  }, [addLog]);
 
-  // Initialiser les listeners et la capture
-  useEffect(() => {
-    // Configurer les listeners pour les événements
-    const stateListener = ExpoObjectCaptureModule.addStateChangeListener(event => {
-      addLog(`Changement d'état: ${event.state}`);
-      setState(event.state);
-
-      // Gérer automatiquement les transitions
-      if (event.state === 'capturing') {
-        setImageCount(ExpoObjectCaptureModule.getImageCount());
-      }
-    });
-
-    const feedbackListener = ExpoObjectCaptureModule.addFeedbackListener(event => {
-      addLog(`Feedback reçu: ${event.messages.join(', ')}`);
-      setFeedbackMessages(event.messages);
-    });
-
-    const modelCompleteListener = ExpoObjectCaptureModule.addModelCompleteListener(event => {
-      addLog(`Modèle terminé: ${event.modelPath}`);
-      onComplete(event.modelPath, event.previewPath);
-    });
-
-    const errorListener = ExpoObjectCaptureModule.addErrorListener(event => {
-      addLog(`Erreur: ${event.message}`);
-      Alert.alert("Erreur", event.message);
-      onCancel();
-    });
-
-    // Initialiser la capture dès le montage
-    initializeCapture();
-    // Nettoyer les ressources
-    return () => {
-      addLog("Démontage du composant - nettoyage des listeners");
-      stateListener?.remove();
-      feedbackListener?.remove();
-      modelCompleteListener?.remove();
-      errorListener?.remove();
-
-      // Annuler la capture si elle est en cours
-      cancelCapture().catch(err => {
-        console.error("Erreur lors de l'annulation de la capture:", err);
-      });
-    };
-  }, [initializeCapture, onComplete, onCancel]);
+  // Gérer la détection d'objet
+  const handleDetectObject = useCallback(async () => {
+    try {
+      addLog("Démarrage de la détection d'objet...");
+      const success = await detectObject();
+      addLog(`Résultat de la détection: ${success ? "Réussi" : "Échec"}`);
+    } catch (error) {
+      addLog(`Erreur de détection: ${error}`);
+      Alert.alert("Erreur", `Une erreur est survenue lors de la détection: ${error}`);
+    }
+  }, [addLog]);
 
   // Terminer la capture
   const handleFinishCapture = useCallback(async () => {
@@ -116,102 +97,184 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onComplete, onCancel }) => {
       addLog(`Erreur de finalisation: ${error}`);
       Alert.alert('Erreur', `Une erreur est survenue lors de la finalisation de la capture: ${error}`);
     }
+  }, [addLog]);
 
+  // Gérer la complétion
+  const handleComplete = useCallback((modelPath: string, previewPath: string) => {
+    Alert.alert(
+      "Capture terminée",
+      `Modèle créé avec succès!\nChemin: ${modelPath}`,
+      [{ text: "OK", onPress: () => router.back() }]
+    );
+  }, [router]);
+
+  // Gérer l'annulation
+  const handleCancel = useCallback(() => {
+    cancelCapture().catch(err => {
+      console.error("Erreur lors de l'annulation de la capture:", err);
+    });
+    router.back();
+  }, [router]);
+
+  // Afficher/masquer le débogage
+  const handleToggleDebug = useCallback(() => {
+    setShowDebug(prev => !prev);
   }, []);
-  // Affichage conditionnel en fonction de l'état
-  const renderContent = () => {
-    switch (state) {
-      case 'initializing':
-        return (
-          <View style={styles.progressContainer}>
-            <Text style={styles.progressText}>Initialisation de la capture...</Text>
-          </View>
-        );
 
-      case 'detecting':
-        return (
-          <View style={styles.progressContainer}>
-            <Text style={styles.progressText}>Détection de l'objet...</Text>
-          </View>
-        );
-
-      case 'capturing':
-        return (
-          <View style={styles.feedbackContainer}>
-            <Text style={styles.imageCountText}>Images capturées: {imageCount}</Text>
-          </View>
-        );
-
-      default:
-        return null;
+  // Tester l'envoi d'événements
+  const testEvents = useCallback(async () => {
+    try {
+      addLog("Simulation locale d'un événement de feedback");
+      // Simuler un événement localement
+      setFeedbackMessages(["Message de test local: " + new Date().toISOString()]);
+    } catch (error) {
+      addLog(`Erreur de test d'événement: ${error}`);
     }
-  };
+  }, [addLog]);
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.captureViewContainer}>
-      <ObjectCaptureView
+  // Configuration des écouteurs et initialisation
+  useEffect(() => {
+    addLog("Composant monté - configuration des écouteurs...");
+
+    // Configurer les écouteurs d'événements
+    const stateListener = addStateChangeListener((event) => {
+      addLog(`État changé: ${event.state}`);
+      setState(event.state);
+
+      // Mettre à jour le compte d'images si on est en mode capture
+      if (event.state === 'capturing') {
+        setImageCount(getImageCount());
+      }
+    });
+    const feedBackListener = addFeedbackListener((event) => {
+      console.debug(event)
+    })
+    const modelCompleteListener = eventEmitter.addListener('onModelComplete', (event) => {
+      addLog(`Modèle terminé: ${event.modelPath}`);
+      handleComplete(event.modelPath, event.previewPath);
+    });
+
+    const errorListener = eventEmitter.addListener('onError', (event) => {
+      addLog(`Erreur: ${event.message}`);
+      Alert.alert("Erreur", event.message);
+    });
+
+    // Initialiser la capture après la configuration des écouteurs
+    initializeCapture();
+
+    // Nettoyage à la destruction du composant
+    return () => {
+      addLog("Démontage du composant - nettoyage des écouteurs");
+      stateListener.remove();
+      modelCompleteListener.remove();
+      errorListener.remove();
+      feedBackListener.remove()
+
+      // Annuler la capture si nécessaire
+      cancelCapture().catch(err => {
+        console.error("Erreur lors de l'annulation de la capture:", err);
+      });
+    };
+  }, [initializeCapture, handleComplete, handleCancel, addLog]);
+
+  // Vérifier si on doit afficher le loader en fonction de l'état
+  const isLoading = !isComponentReady || state === 'initializing';
+
+  const CaptureView = useMemo(() => ( <ObjectCaptureView
               style={styles.captureView}
               captureMode={CaptureModeType.OBJECT}
             />
-      </View>
-      <View style={{flex: 1, flexDirection: "column", justifyContent: "space-between", marginHorizontal: 25}}>
-       <View style={{flexDirection: "row", columnGap: 20, justifyContent: "space-between"}}>
+  ), [])
 
-        </View>
-          <View style={{flexDirection: "row", justifyContent: "center"}}>
-             <View style={{bottom: 60}}>
-
-             </View>
-             <View style={{bottom: 60}}>
-
-             </View>
+  return (
+    <View style={styles.container}>
+      {1==2 ? (
+        <LoadingScreen />
+      ) : (
+        <SafeAreaView style={styles.container}>
+          <View style={styles.captureViewContainer}>
+            {CaptureView}
           </View>
-      </View>
 
-      {/* Messages de feedback */}
-      <View style={styles.feedbackContainer}>
-        {feedbackMessages.map((message, index) => (
-          <Text key={index} style={styles.feedbackText}>{message}</Text>
-        ))}
-      </View>
-
-      {/* Contenu dynamique */}
-      <View style={styles.controlsContainer}>
-
-        {renderContent()}
-
-        {state === 'capturing' && (
+          {/* Bouton de débogage en haut à droite */}
           <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={handleFinishCapture}>
-            <Text style={styles.buttonText}>Terminer la capture</Text>
+            style={styles.debugButton}
+            onPress={handleToggleDebug}>
+            <Text style={styles.debugButtonText}>Debug</Text>
           </TouchableOpacity>
-        )}
-      </View>
-    </SafeAreaView>
-  );
-};
 
+          {/* Messages de feedback */}
+          <View style={styles.feedbackContainer}>
+            {feedbackMessages.map((message, index) => (
+              <Text key={index} style={styles.feedbackText}>{message}</Text>
+            ))}
+          </View>
+
+          {/* Zone de débogage */}
+          {showDebug && (
+            <View style={styles.debugContainer}>
+              <Text style={styles.debugTitle}>État actuel: {state}</Text>
+              <Text style={styles.debugTitle}>Images: {imageCount}</Text>
+              <ScrollView style={styles.debugScroll}>
+                {debugLog.map((log, index) => (
+                  <Text key={index} style={styles.debugText}>{log}</Text>
+                ))}
+              </ScrollView>
+              <TouchableOpacity
+                style={styles.testButton}
+                onPress={testEvents}>
+                <Text style={styles.buttonText}>Tester les événements</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Contrôles de capture */}
+          <View style={styles.controlsContainer}>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={handleDetectObject}>
+              <Text style={styles.buttonText}>Détecter l'objet</Text>
+            </TouchableOpacity>
+
+            {state === 'capturing' && (
+              <TouchableOpacity
+                style={styles.finishButton}
+                onPress={handleFinishCapture}>
+                <Text style={styles.buttonText}>Terminer la capture</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={handleCancel}>
+              <Text style={styles.buttonText}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      )}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1
+    flex: 1,
+    backgroundColor: '#000'
   },
-   captureViewContainer: {
-     top: 0,
-     bottom: 0,
-     left: 0,
-     right: 0,
-     position: "absolute",
-     zIndex: 0,
+  captureViewContainer: {
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    position: "absolute",
+    zIndex: 0,
   },
   captureView: {
     flex: 1,
   },
   feedbackContainer: {
     position: 'absolute',
-    top: 250,
+    top: 150,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -246,6 +309,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  finishButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    width: 250,
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 10,
+  },
   cancelButton: {
     backgroundColor: '#F44336',
     paddingVertical: 15,
@@ -255,29 +328,62 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
   },
-  progressContainer: {
+  debugButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
     backgroundColor: 'rgba(0,0,0,0.7)',
-    padding: 15,
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 15,
+    zIndex: 20,
+  },
+  debugButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  debugContainer: {
+    position: 'absolute',
+    top: 100,
+    left: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.8)',
     borderRadius: 10,
-    width: 300,
+    padding: 10,
+    maxHeight: 300,
+    zIndex: 15,
   },
-  progressText: {
+  debugTitle: {
     color: 'white',
-    fontSize: 14,
-    marginBottom: 10,
-    textAlign: 'center',
+    fontWeight: 'bold',
+    marginBottom: 5,
   },
-  imageCountText: {
-    color: 'white',
-    fontSize: 16,
-    marginBottom: 10,
+  debugScroll: {
+    maxHeight: 200,
   },
-  statusText: {
+  debugText: {
+    color: '#aaffaa',
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  testButton: {
+    backgroundColor: '#9C27B0',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 15,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000'
+  },
+  loadingText: {
     color: 'white',
-    fontSize: 16,
-    marginBottom: 10,
+    fontSize: 18,
+    marginTop: 20,
+    textAlign: 'center'
   }
 });
-
-
-export default ScanScreen;
