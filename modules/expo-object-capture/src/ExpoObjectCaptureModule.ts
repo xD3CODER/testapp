@@ -1,4 +1,4 @@
-import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
+import { requireNativeModule } from 'expo-modules-core';
 import { NativeEventEmitter } from 'react-native';
 
 // Enum pour les modes de capture
@@ -389,9 +389,6 @@ const moduleInstance = new ObjectCaptureModuleClass();
 
 // Exporter l'instance comme module par défaut
 export default moduleInstance;
-
-// Exporter la vue native
-export const ObjectCaptureView = requireNativeViewManager('ExpoObjectCapture');
 
 // Exporter les fonctions individuelles (wrappers autour des méthodes de l'instance)
 export const createCaptureSession = async () => moduleInstance.createCaptureSession();

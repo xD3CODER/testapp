@@ -2,7 +2,7 @@ import ExpoObjectCaptureModule from './src/ExpoObjectCaptureModule';
 export default ExpoObjectCaptureModule;
 
 // Exporter la vue native
-export { ObjectCaptureView } from './src/ExpoObjectCaptureModule';
+export { default as ObjectCaptureView } from "./src/ExpoObjectCaptureView"
 
 // Exporter les fonctions individuelles
 export {
