@@ -9,6 +9,6 @@ export interface ObjectCaptureViewProps extends ViewProps {}
 const NativeObjectCaptureView = requireNativeViewManager('ExpoObjectCapture');
 
 // Composant React
-export default function ObjectCaptureView(props: ObjectCaptureViewProps) {
+export function ObjectCaptureView(props: ObjectCaptureViewProps) {
   return <NativeObjectCaptureView {...props} />;
 }

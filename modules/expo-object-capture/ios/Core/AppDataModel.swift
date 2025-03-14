@@ -263,6 +263,7 @@ extension AppDataModel {
             configuration: configuration)
 
         state = .reconstructing
+        sendEventToJS("onStateChanged", ["state": "reconstructing"])
     }
 
     private func reset() {
@@ -346,7 +347,7 @@ extension AppDataModel {
                 }
             case .prepareToReconstruct:
                 // Clean up the session to free GPU and memory resources.
-                objectCaptureSession = nil
+                //@todo objectCaptureSession = nil
                 do {
                     try startReconstruction()
                 } catch {

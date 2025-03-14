@@ -2,7 +2,7 @@ import ExpoObjectCaptureModule from './src/ExpoObjectCaptureModule';
 export default ExpoObjectCaptureModule;
 
 // Exporter la vue native
-export { default as ObjectCaptureView } from "./src/ExpoObjectCaptureView"
+export {  ObjectCaptureView } from "./src/ExpoObjectCaptureView"
 
 // Exporter l'émetteur d'événements
 export { eventEmitter } from './src/ExpoObjectCaptureModule';
@@ -19,6 +19,7 @@ export {
   detectObject,
   addStateChangeListener,
   addFeedbackListener,
+    navigateToReconstruction,
   addProgressListener,
   addModelCompleteListener,
   addErrorListener,

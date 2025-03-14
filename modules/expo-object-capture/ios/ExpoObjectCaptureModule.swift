@@ -317,7 +317,6 @@ public class ExpoObjectCaptureModule: Module {
                 }
             }
         }
-
     
 
         // Méthode pour créer une nouvelle session de capture
@@ -382,9 +381,26 @@ AsyncFunction("createCaptureSession") { (promise: Promise) in
 
                 // Récupérer toutes les instances de ExpoObjectCaptureView
                 for window in UIApplication.shared.windows {
-                    self.findAndAttachSessionToViews(in: window, session: session)
+                    if let captureView = self.findExpoObjectCaptureView(in: window) {
+                        captureView.setSession(session)
+                        promise.resolve(true)
+                        return
+                    }
                 }
-                promise.resolve(true)
+                promise.resolve(false)
+            }
+        }
+        AsyncFunction("navigateToReconstruction") { (promise: Promise) in
+            Task { @MainActor in
+                // Récupérer toutes les instances de ExpoObjectCaptureView
+                for window in UIApplication.shared.windows {
+                    if let captureView = self.findExpoObjectCaptureView(in: window) {
+                        captureView.setReconstructionView()
+                        promise.resolve(true)
+                        return
+                    }
+                }
+                promise.resolve(false)
             }
         }
 
@@ -676,16 +692,18 @@ func convertSessionStateToString(_ state: ObjectCaptureSession.CaptureState) -> 
     // MARK: - View Attachment & Presentation
 
     @MainActor
-    private func findAndAttachSessionToViews(in view: UIView, session: ObjectCaptureSession) {
+    private func findExpoObjectCaptureView(in view: UIView) -> ExpoObjectCaptureView? {
         print("DEBUG: Recherche de vues pour attacher la session dans \(view)")
         if let captureView = view as? ExpoObjectCaptureView {
             print("DEBUG: Vue ExpoObjectCaptureView trouvée, attachement de la session")
-            captureView.setSession(session)
+            return captureView
         }
 
         for subview in view.subviews {
-            findAndAttachSessionToViews(in: subview, session: session)
+           return findExpoObjectCaptureView(in: subview)
         }
+        
+        return nil
     }
 
     @MainActor

@@ -20,6 +20,7 @@ import {
   addStateChangeListener,
   createCaptureSession,
   attachSessionToView,
+    navigateToReconstruction,
   finishCapture,
   cancelCapture,
   detectObject,
@@ -158,8 +159,14 @@ export default function ScanScreen() {
       addLog("Composant monté - configuration des écouteurs...");
 
       // Configurer les écouteurs d'événements
-      stateListener = addStateChangeListener((event) => {
+      stateListener = addStateChangeListener(async (event) => {
         addLog(`État changé: ${event.state}`);
+        if(event.state == "reconstructing") {
+           const reconstrctution = await navigateToReconstruction();
+        if (!reconstrctution) {
+          throw new Error("Impossible d'attacher la session à la vue");
+        }
+        }
         setState(event.state);
 
         // Mettre à jour le compte d'images si on est en mode capture

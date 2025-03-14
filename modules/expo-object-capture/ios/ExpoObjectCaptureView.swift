@@ -3,6 +3,8 @@ import RealityKit
 import SwiftUI
 public class ExpoObjectCaptureView: ExpoView {
     private var hostingController: UIHostingController<AnyView>?
+    private var currentSession: ObjectCaptureSession?
+
     let onViewReady = EventDispatcher()
 
     required public init(appContext: AppContext? = nil) {
@@ -32,9 +34,41 @@ public class ExpoObjectCaptureView: ExpoView {
             self.onViewReady([:])
         }
     }
+    public func setReconstructionView() {
+        print("SETTING RECONSTRUCTION VIEW")
+        // Nettoyer la vue précédente si nécessaire
+        hostingController?.view.removeFromSuperview()
+        
+        guard let captureFolderManager = AppDataModel.instance.captureFolderManager else {
+               fatalError("Capture folder manager is nil")
+           }
+          let folder = captureFolderManager.modelsFolder.appendingPathComponent("model-mobile.usdz")
+        
 
+        let captureView = UIHostingController(rootView:
+            AnyView(
+                ZStack {
+                    ReconstructionPrimaryView(outputFile: folder)
+                                            .environment(AppDataModel.instance)
+                }
+                .edgesIgnoringSafeArea(.all)
+                .environment(AppDataModel.instance)
+            )
+        )
+
+        // Remplacer la vue existante
+        hostingController?.view.removeFromSuperview()
+        captureView.view.frame = bounds
+        captureView.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(captureView.view)
+        hostingController = captureView
+        
+
+    }
     public func setSession(_ session: ObjectCaptureSession?) {
         guard let session = session, #available(iOS 18.0, *) else { return }
+
+        currentSession = session
 
         // Vue combinée unique, enveloppée dans AnyView
         let captureView = UIHostingController(rootView:
@@ -62,6 +96,7 @@ public class ExpoObjectCaptureView: ExpoView {
         hostingController?.view.frame = bounds
     }
 }
+
 struct CustomRoundReticleView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 

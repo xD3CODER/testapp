@@ -28,6 +28,7 @@ try {
     isSupported: () => false,
     createCaptureSession: async () => false,
     attachSessionToView: async () => false,
+    navigateToReconstruction: async () => false,
     startCapture: async () => ({ success: false }),
     finishCapture: async () => false,
     cancelCapture: async () => false,
@@ -46,6 +47,7 @@ export const eventEmitter = new EventEmitter(nativeModule);
 // Exporter les fonctions individuelles
 export const createCaptureSession = async () => nativeModule.createCaptureSession();
 export const attachSessionToView = async () => nativeModule.attachSessionToView();
+export const navigateToReconstruction = async () => nativeModule.navigateToReconstruction();
 export const startCapture = async () => nativeModule.startCapture();
 export const getImageCountAsync = async () => nativeModule.getImageCountAsync();
 export const finishCapture = async () => nativeModule.finishCapture();
