@@ -25,7 +25,6 @@ protocol AppDataModelCompletionDelegate: AnyObject {
 
 struct CachedValues {
     var isSupported: Bool = false
-    var currentState: String = "ready"
     var imageCount: Int = 0
 }
 
@@ -67,13 +66,7 @@ extension AppDataModel {
             objc_setAssociatedObject(self, &AssociatedKeys.feedbackDelegateKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
     }
-
-    @MainActor
-    func setCaptureFolderManager(_ manager: CaptureFolderManager) {
-        // Accès aux propriétés privées à l'intérieur d'une extension
-        self.captureFolderManager = manager
-    }
-
+    
     // Méthode pour terminer la capture avec succès
     @MainActor
     func completeCapture(with data: [String: Any]) {
@@ -167,7 +160,6 @@ class SessionCleanupManager {
 
         // Vider les références
         AppDataModel.instance.objectCaptureSession = nil
-        AppDataModel.instance.captureFolderManager = nil
     }
 
     @MainActor
@@ -309,9 +301,7 @@ public class ExpoObjectCaptureModule: Module {
 
         // Initialiser après création
         OnCreate {
-            Task { @MainActor in
-                self.initializeCache()
-            }
+         
         }
 
         // Définir la vue
@@ -328,21 +318,7 @@ public class ExpoObjectCaptureModule: Module {
             }
         }
 
-        OnStartObserving {
-            NotificationCenter.default.addObserver(self,
-                                                   selector: #selector(self.handleAppWillResignActive),
-                                                   name: UIApplication.willResignActiveNotification,
-                                                   object: nil)
-
-            NotificationCenter.default.addObserver(self,
-                                                   selector: #selector(self.handleAppWillTerminate),
-                                                   name: UIApplication.willTerminateNotification,
-                                                   object: nil)
-        }
-
-        OnStopObserving {
-            NotificationCenter.default.removeObserver(self)
-        }
+    
 
         // Méthode pour créer une nouvelle session de capture
         // Dans la méthode AsyncFunction("createCaptureSession")
@@ -367,24 +343,13 @@ AsyncFunction("createCaptureSession") { (promise: Promise) in
             // Configurer les delegates
             AppDataModel.instance.completionDelegate = self
             // Créer une nouvelle session
-            let session = ObjectCaptureSession()
-            self.objectCaptureSession = session
+           
 
-            // Créer un gestionnaire de dossier
-            let captureFolderManager = try await self.createCaptureFolderWithRetry()
-
-            // Configuration de la session
-            var configuration = ObjectCaptureSession.Configuration()
-            configuration.isOverCaptureEnabled = true
-            configuration.checkpointDirectory = captureFolderManager.checkpointFolder
-
-            // Démarrer la session
-            session.start(imagesDirectory: captureFolderManager.imagesFolder,
-                         configuration: configuration)
-
+            var session = try AppDataModel.instance.startNewCapture()
             // Définir la session et le gestionnaire dans AppDataModel
+            self.objectCaptureSession = session
             AppDataModel.instance.objectCaptureSession = session
-            AppDataModel.instance.setCaptureFolderManager(captureFolderManager)
+          
             // Simplifier cette méthode car AppDataModel va gérer les événements
             // Déverrouiller
             sessionCreationLock.unlock()
@@ -426,60 +391,33 @@ AsyncFunction("createCaptureSession") { (promise: Promise) in
         AsyncFunction("detectObject") { (promise: Promise) in
             Task { @MainActor in
                 guard let session = self.objectCaptureSession else {
-                    promise.resolve(false)
-                    return
+                    return promise.reject(NSError(domain: "ExpoObjectCapture", code: 1, userInfo: [NSLocalizedDescriptionKey: "session is not ready to detectObject"]))
                 }
-
+                print("session state ", session.state)
                 if session.state == .ready {
-                    switch AppDataModel.instance.captureMode {
-                    case .object:
-                        let hasDetectionFailed = !(session.startDetecting())
-                        promise.resolve(hasDetectionFailed)
-                        return
-                    case .area:
-                        return
-                    }
-                } else if case .detecting = session.state {
-                    session.resetDetection()
+                    let detection = session.startDetecting()
+                    print("START DETECTING RESULT ", detection)
+                    return promise.resolve(detection)
                 }
-                promise.resolve(true)
+                promise.reject(NSError(domain: "ExpoObjectCapture", code: 1, userInfo: [NSLocalizedDescriptionKey: "session is not ready to detectObject"]))
             }
         }
 
         // Définir une fonction qui peut être appelée depuis React Native pour démarrer la capture
-        AsyncFunction("startCapture") { (options: [String: Any]?, promise: Promise) in
+        AsyncFunction("startCapture") { (promise: Promise) in
             Task { @MainActor in
                 do {
-                    // Réinitialiser l'AppDataModel si nécessaire
-                    if AppDataModel.instance.state != .ready {
-                        if let oldSession = AppDataModel.instance.objectCaptureSession {
-                            oldSession.cancel()
-                        }
-                        AppDataModel.instance.endCapture()
+                    guard let session = self.objectCaptureSession else {
+                        return promise.reject(NSError(domain: "ExpoObjectCapture", code: 1, userInfo: [NSLocalizedDescriptionKey: "session is not ready to detectObject"]))
                     }
-
-                    // Configurer le mode de capture si spécifié
-                    if let options = options, let modeString = options["captureMode"] as? String {
-                        if modeString.lowercased() == "area" {
-                            AppDataModel.instance.captureMode = .area
-                        } else {
-                            AppDataModel.instance.captureMode = .object
-                        }
-                    }
-
-                    // Configurer le delegate pour recevoir les callbacks
-                    AppDataModel.instance.completionDelegate = self
-
-                    // Stocker la promesse pour la résoudre plus tard
-                    self.capturePromise = promise
-
-                    // Présenter l'interface de capture guidée
-                    self.presentGuidedCapture(options: options)
+                    session.startCapturing()
                 } catch {
                     promise.reject(NSError(domain: "ExpoObjectCapture", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to start capture: \(error)"]))
                 }
             }
         }
+        
+        
 
         // Fonction pour modifier le mode de capture (objet ou zone)
         Function("setCaptureMode") { (mode: String) -> Void in
@@ -495,14 +433,65 @@ AsyncFunction("createCaptureSession") { (promise: Promise) in
         // Fonction pour terminer la session de capture
         AsyncFunction("finishCapture") { (promise: Promise) in
             Task { @MainActor in
-                guard let session = self.objectCaptureSession else {
-                    promise.resolve(false)
-                    return
-                }
+                    do {
+                        // Vérifier que la session existe
+                        guard let session = AppDataModel.instance.objectCaptureSession else {
+                            promise.reject(NSError(domain: "ExpoObjectCapture", code: 1, userInfo: [NSLocalizedDescriptionKey: "No active capture session"]))
+                            return
+                        }
 
-                session.finish()
-                promise.resolve(true)
-            }
+                        // Trouver le contrôleur de vue visible actuel
+                        guard let keyWindow = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) else {
+                            promise.reject(NSError(domain: "ExpoObjectCapture", code: 2, userInfo: [NSLocalizedDescriptionKey: "No active window found"]))
+                            return
+                        }
+
+                        var topController = keyWindow.rootViewController
+                        while let presentedController = topController?.presentedViewController {
+                            topController = presentedController
+                        }
+
+                        guard let topController = topController else {
+                            promise.reject(NSError(domain: "ExpoObjectCapture", code: 3, userInfo: [NSLocalizedDescriptionKey: "No visible controller found"]))
+                            return
+                        }
+
+                        // Utiliser determineCurrentOnboardingState pour obtenir l'état correct
+                        guard let initialState = AppDataModel.instance.determineCurrentOnboardingState() else {
+                            promise.reject(NSError(domain: "ExpoObjectCapture", code: 4, userInfo: [NSLocalizedDescriptionKey: "Cannot determine onboarding state"]))
+                            return
+                        }
+
+                        // Créer une variable bindable pour gérer la présentation
+                        @State var showOnboardingView = true
+
+                        // Créer la vue d'onboarding avec l'état déterminé dynamiquement
+                        let onboardingView = OnboardingView(
+                            state: initialState,
+                            showOnboardingView: Binding(
+                                get: { showOnboardingView },
+                                set: { newValue in
+                                    showOnboardingView = newValue
+                                    if !newValue {
+                                        // Fermer le sheet si nécessaire
+                                        topController.dismiss(animated: true, completion: nil)
+                                    }
+                                }
+                            )
+                        )
+                        .environment(AppDataModel.instance)
+                        .environment(session)  // Ajouter explicitement la session à l'environnement
+
+                        let hostingController = UIHostingController(rootView: AnyView(onboardingView))
+                        hostingController.modalPresentationStyle = .fullScreen
+
+                        topController.present(hostingController, animated: true) {
+                            promise.resolve(true)
+                        }
+                    } catch {
+                        promise.reject(error)
+                    }
+                }
         }
 
         // Fonction pour annuler la session de capture
@@ -536,10 +525,6 @@ AsyncFunction("createCaptureSession") { (promise: Promise) in
             return self.cachedValues.isSupported
         }
 
-        // Fonction pour obtenir l'état actuel - utilise la valeur mise en cache
-        Function("getCurrentState") { () -> String in
-            return self.cachedValues.currentState
-        }
 
         // Fonction pour récupérer le nombre d'images capturées - utilise la valeur mise en cache
         Function("getImageCount") { () -> Int in
@@ -607,7 +592,7 @@ AsyncFunction("createCaptureSession") { (promise: Promise) in
 
         // Initialiser les autres valeurs de cache
         self.updateCachedValue { values in
-            values.currentState = "ready"
+           
             values.imageCount = 0
         }
 
@@ -639,7 +624,6 @@ AsyncFunction("createCaptureSession") { (promise: Promise) in
                     let count = session.numberOfShotsTaken
 
                     self.updateCachedValue { values in
-                        values.currentState = state
                         values.imageCount = count
                     }
                 }
@@ -670,13 +654,12 @@ private func startTrackingSessionUpdates(session: ObjectCaptureSession) {
 
     // Mettre à jour les valeurs en cache initiales
     updateCachedValue { values in
-        values.currentState = convertSessionStateToString(session.state)
         values.imageCount = session.numberOfShotsTaken
     }
 }
 
 // Helper pour convertir l'état de session en chaîne
-private func convertSessionStateToString(_ state: ObjectCaptureSession.CaptureState) -> String {
+func convertSessionStateToString(_ state: ObjectCaptureSession.CaptureState) -> String {
     switch state {
     case .initializing: return "initializing"
     case .ready: return "ready"

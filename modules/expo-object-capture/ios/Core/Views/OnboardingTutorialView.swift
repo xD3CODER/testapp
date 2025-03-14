@@ -97,7 +97,7 @@ struct OnboardingTutorialView: View {
 
     private var shouldShowTutorialInReview: Bool {
         switch onboardingStateMachine.currentState {
-            case .flipObject, .flipObjectASecondTime, .captureFromLowerAngle, .captureFromHigherAngle:
+            case .captureFromLowerAngle, .captureFromHigherAngle:
                 return true
             default:
                 return false
@@ -105,15 +105,13 @@ struct OnboardingTutorialView: View {
     }
 
     private let onboardingStateToTutorialNameMapOnIphone: [ OnboardingState: String ] = [
-        .flipObject: "ScanPasses-iPhone-FixedHeight-2",
-        .flipObjectASecondTime: "ScanPasses-iPhone-FixedHeight-3",
+      
         .captureFromLowerAngle: "ScanPasses-iPhone-FixedHeight-unflippable-low",
         .captureFromHigherAngle: "ScanPasses-iPhone-FixedHeight-unflippable-high"
     ]
 
     private let onboardingStateToTutorialNameMapOnIpad: [ OnboardingState: String ] = [
-        .flipObject: "ScanPasses-iPad-FixedHeight-2",
-        .flipObjectASecondTime: "ScanPasses-iPad-FixedHeight-3",
+       
         .captureFromLowerAngle: "ScanPasses-iPad-FixedHeight-unflippable-low",
         .captureFromHigherAngle: "ScanPasses-iPad-FixedHeight-unflippable-high"
     ]
@@ -144,9 +142,7 @@ struct OnboardingTutorialView: View {
         .secondSegmentComplete: LocalizedString.secondSegmentCompleteTitle,
         .thirdSegmentNeedsWork: LocalizedString.thirdSegmentNeedsWorkTitle,
         .thirdSegmentComplete: LocalizedString.thirdSegmentCompleteTitle,
-        .flipObject: LocalizedString.flipObjectTitle,
-        .flipObjectASecondTime: LocalizedString.flipObjectASecondTimeTitle,
-        .flippingObjectNotRecommended: LocalizedString.flippingObjectNotRecommendedTitle,
+
         .captureFromLowerAngle: LocalizedString.captureFromLowerAngleTitle,
         .captureFromHigherAngle: LocalizedString.captureFromHigherAngleTitle,
         .captureInAreaMode: LocalizedString.captureInAreaModeTitle
@@ -164,9 +160,6 @@ struct OnboardingTutorialView: View {
         .secondSegmentComplete: LocalizedString.secondSegmentCompleteDetailText,
         .thirdSegmentNeedsWork: LocalizedString.thirdSegmentNeedsWorkDetailText,
         .thirdSegmentComplete: LocalizedString.thirdSegmentCompleteDetailText,
-        .flipObject: LocalizedString.flipObjectDetailText,
-        .flipObjectASecondTime: LocalizedString.flipObjectASecondTimeDetailText,
-        .flippingObjectNotRecommended: LocalizedString.flippingObjectNotRecommendedDetailText,
         .captureFromLowerAngle: LocalizedString.captureFromLowerAngleDetailText,
         .captureFromHigherAngle: LocalizedString.captureFromHigherAngleDetailText,
         .captureInAreaMode: LocalizedString.captureInAreaModeDetailText

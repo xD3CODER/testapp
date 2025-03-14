@@ -46,7 +46,7 @@ export const eventEmitter = new EventEmitter(nativeModule);
 // Exporter les fonctions individuelles
 export const createCaptureSession = async () => nativeModule.createCaptureSession();
 export const attachSessionToView = async () => nativeModule.attachSessionToView();
-export const startCapture = async (options?: ObjectCaptureOptions) => nativeModule.startCapture(options || {});
+export const startCapture = async () => nativeModule.startCapture();
 export const getImageCountAsync = async () => nativeModule.getImageCountAsync();
 export const finishCapture = async () => nativeModule.finishCapture();
 export const cancelCapture = async () => nativeModule.cancelCapture();
@@ -92,8 +92,8 @@ export default {
   getImageCount,
   setCaptureMode,
   startNewCapture: createCaptureSession,
+  startCapture,
   startDetecting: detectObject,
-  startCapturing: () => Promise.resolve(true),
   finishCapture,
   cancelCapture,
   resetDetection,

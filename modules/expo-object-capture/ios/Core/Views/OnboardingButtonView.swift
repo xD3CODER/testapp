@@ -19,9 +19,6 @@ struct OnboardingButtonView: View {
     @Binding var showOnboardingView: Bool
     @Binding var showShotLocations: Bool
 
-    @State private var userHasIndicatedObjectCannotBeFlipped: Bool? = nil
-    @State private var userHasIndicatedFlipObjectAnyway: Bool? = nil
-
     var body: some View {
         VStack {
             HStack {
@@ -37,29 +34,19 @@ struct OnboardingButtonView: View {
 
             VStack(spacing: 0) {
                 let currentStateInputs = onboardingStateMachine.currentStateInputs()
-                if currentStateInputs.contains(where: { $0 == .continue(isFlippable: false) || $0 == .continue(isFlippable: true) }) {
+                if currentStateInputs.contains(.continue) {
                     CreateButton(buttonLabel: LocalizedString.continue,
                                  buttonLabelColor: .white,
                                  shouldApplyBackground: true,
-                                 action: { transition(with: .continue(isFlippable: appModel.isObjectFlippable)) }
+                                 action: { transition(with: .continue) }
                     )
                 }
-                if currentStateInputs.contains(where: { $0 == .flipObjectAnyway }) {
-                    CreateButton(buttonLabel: LocalizedString.flipAnyway,
-                                 buttonLabelColor: .blue,
-                                 action: {
-                        userHasIndicatedFlipObjectAnyway = true
-                        transition(with: .flipObjectAnyway)
-                    })
-                }
-                if currentStateInputs.contains(where: { $0 == .skip(isFlippable: false) || $0 == .skip(isFlippable: true) }) {
+                if currentStateInputs.contains(.skip) {
                     CreateButton(buttonLabel: LocalizedString.skip,
                                  buttonLabelColor: .blue,
-                                 action: {
-                        transition(with: .skip(isFlippable: appModel.isObjectFlippable))
-                    })
+                                 action: { transition(with: .skip) })
                 }
-                if currentStateInputs.contains(where: { $0 == .finish }) {
+                if currentStateInputs.contains(.finish) {
                     let buttonLabel = appModel.captureMode == .area ? LocalizedString.process : LocalizedString.finish
                     let buttonLabelColor: Color = appModel.captureMode == .area ? .white :
                         (onboardingStateMachine.currentState == .thirdSegmentComplete ? .white : .blue)
@@ -71,20 +58,7 @@ struct OnboardingButtonView: View {
                                  showBusyIndicator: showBusyIndicator,
                                  action: { [weak session] in session?.finish() })
                 }
-                if currentStateInputs.contains(where: { $0 == .objectCannotBeFlipped }) {
-                    CreateButton(buttonLabel: LocalizedString.cannotFlipYourObject,
-                                 buttonLabelColor: .blue,
-                                 action: {
-                        userHasIndicatedObjectCannotBeFlipped = true
-                        transition(with: .objectCannotBeFlipped)
-                    })
-                }
-                if onboardingStateMachine.currentState == OnboardingState.tooFewImages ||
-                    onboardingStateMachine.currentState == .secondSegmentComplete  ||
-                    onboardingStateMachine.currentState == .thirdSegmentComplete {
-                    CreateButton(buttonLabel: "", action: {})
-                }
-                if currentStateInputs.contains(where: { $0 == .saveDraft }) {
+                if currentStateInputs.contains(.saveDraft) {
                     let showBusyIndicator = session.state == .finishing && appModel.isSaveDraftEnabled ? true : false
                     CreateButton(buttonLabel: LocalizedString.saveDraft,
                                  buttonLabelColor: .blue,
@@ -93,6 +67,11 @@ struct OnboardingButtonView: View {
                         appModel?.saveDraft()
                     })
                 }
+                if onboardingStateMachine.currentState == OnboardingState.tooFewImages ||
+                    onboardingStateMachine.currentState == .secondSegmentComplete  ||
+                    onboardingStateMachine.currentState == .thirdSegmentComplete {
+                    CreateButton(buttonLabel: "", action: {})
+                }
             }
             .padding(.bottom)
         }
@@ -100,7 +79,7 @@ struct OnboardingButtonView: View {
 
     private var isTutorialPlaying: Bool {
         switch onboardingStateMachine.currentState {
-            case .flipObject, .flipObjectASecondTime, .captureFromLowerAngle, .captureFromHigherAngle:
+            case .captureFromLowerAngle, .captureFromHigherAngle:
                 return true
             default:
                 return false
@@ -119,21 +98,7 @@ struct OnboardingButtonView: View {
     }
 
     private func beginNewOrbitOrSection() {
-        if let userHasIndicatedObjectCannotBeFlipped {
-            appModel.hasIndicatedObjectCannotBeFlipped = userHasIndicatedObjectCannotBeFlipped
-        }
-
-        if let userHasIndicatedFlipObjectAnyway {
-            appModel.hasIndicatedFlipObjectAnyway = userHasIndicatedFlipObjectAnyway
-        }
-
-        // If the app can't flip an object and person doesn't manually override this, use the same segment and add additional orbits to it.
-        if !appModel.isObjectFlippable && !appModel.hasIndicatedFlipObjectAnyway {
-            session.beginNewScanPass()
-        } else {
-            session.beginNewScanPassAfterFlip()
-            appModel.isObjectFlipped = true
-        }
+        session.beginNewScanPass()
         showOnboardingView = false
         appModel.orbit = appModel.orbit.next()
     }

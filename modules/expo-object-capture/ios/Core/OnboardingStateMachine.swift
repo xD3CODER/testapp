@@ -54,49 +54,51 @@ class OnboardingStateMachine {
                                                     .thirdSegmentNeedsWork, .thirdSegmentComplete, .captureInAreaMode]
 
     // State transitions based on the user input.
-    private let transitions: [OnboardingState: [(inputs: [OnboardingUserInput], destination: OnboardingState)]] = [
-         .tooFewImages: [(inputs: [.continue(isFlippable: true), .continue(isFlippable: false)], destination: .firstSegment)],
+  private let transitions: [OnboardingState: [(inputs: [OnboardingUserInput], destination: OnboardingState)]] = [
+       .tooFewImages: [(inputs: [.continue], destination: .firstSegment)],
 
-         .firstSegmentNeedsWork: [(inputs: [.continue(isFlippable: true), .continue(isFlippable: false)], destination: .firstSegment),
-                                  (inputs: [.skip(isFlippable: true)], destination: .flipObject),
-                                  (inputs: [.skip(isFlippable: false)], destination: .flippingObjectNotRecommended)],
+       .firstSegmentNeedsWork: [
+           (inputs: [.continue], destination: .firstSegment),
+           (inputs: [.skip], destination: .captureFromLowerAngle)
+       ],
 
-         .firstSegmentComplete: [(inputs: [.finish], destination: .reconstruction),
-                                 (inputs: [.continue(isFlippable: true)], destination: .flipObject),
-                                 (inputs: [.continue(isFlippable: false)], destination: .flippingObjectNotRecommended)],
+       .firstSegmentComplete: [
+           (inputs: [.finish], destination: .reconstruction),
+           (inputs: [.continue], destination: .captureFromLowerAngle)
+       ],
 
-         .flipObject: [(inputs: [.continue(isFlippable: true), .continue(isFlippable: false)], destination: .secondSegment),
-                       (inputs: [.objectCannotBeFlipped], destination: .captureFromLowerAngle)],
+       .captureFromLowerAngle: [
+           (inputs: [.finish], destination: .reconstruction),
+           (inputs: [.continue], destination: .additionalOrbitOnCurrentSegment)
+       ],
 
-         .flippingObjectNotRecommended: [(inputs: [.continue(isFlippable: true), .continue(isFlippable: false)], destination: .captureFromLowerAngle),
-                                         (inputs: [.flipObjectAnyway], destination: .flipObject)],
+       .secondSegmentNeedsWork: [
+           (inputs: [.continue], destination: .dismiss),
+           (inputs: [.skip], destination: .captureFromHigherAngle)
+       ],
 
-         .captureFromLowerAngle: [(inputs: [.finish], destination: .reconstruction),
-                                  (inputs: [.continue(isFlippable: true), .continue(isFlippable: false)],
-                                   destination: .additionalOrbitOnCurrentSegment)],
+       .secondSegmentComplete: [
+           (inputs: [.continue], destination: .captureFromHigherAngle)
+       ],
 
-         .secondSegmentNeedsWork: [(inputs: [.continue(isFlippable: true), .continue(isFlippable: false)], destination: .dismiss),
-                                   (inputs: [.skip(isFlippable: true)], destination: .flipObjectASecondTime),
-                                   (inputs: [.skip(isFlippable: false)], destination: .captureFromHigherAngle)],
+       .captureFromHigherAngle: [
+           (inputs: [.finish], destination: .reconstruction),
+           (inputs: [.continue], destination: .additionalOrbitOnCurrentSegment)
+       ],
 
-         .secondSegmentComplete: [(inputs: [.continue(isFlippable: true)], destination: .flipObjectASecondTime),
-                                  (inputs: [.continue(isFlippable: false)], destination: .captureFromHigherAngle)],
+       .thirdSegmentNeedsWork: [
+           (inputs: [.finish], destination: .reconstruction),
+           (inputs: [.continue], destination: .dismiss)
+       ],
 
-         .flipObjectASecondTime: [(inputs: [.finish], destination: .reconstruction),
-                                  (inputs: [.continue(isFlippable: true), .continue(isFlippable: false)], destination: .thirdSegment)],
+       .thirdSegmentComplete: [(inputs: [.finish], destination: .reconstruction)],
 
-         .captureFromHigherAngle: [(inputs: [.finish], destination: .reconstruction),
-                                   (inputs: [.continue(isFlippable: true), .continue(isFlippable: false)],
-                                    destination: .additionalOrbitOnCurrentSegment)],
+       .captureInAreaMode: [
+           (inputs: [.finish], destination: .reconstruction),
+           (inputs: [.saveDraft], destination: .dismiss)
+       ]
+  ]
 
-         .thirdSegmentNeedsWork: [(inputs: [.finish], destination: .reconstruction),
-                                  (inputs: [.continue(isFlippable: true), .continue(isFlippable: false)], destination: .dismiss)],
-
-         .thirdSegmentComplete: [(inputs: [.finish], destination: .reconstruction)],
-
-         .captureInAreaMode: [(inputs: [.finish], destination: .reconstruction),
-                                  (inputs: [.saveDraft], destination: .dismiss)]
-    ]
 
     private func transitions(for state: OnboardingState) throws -> [(inputs: [OnboardingUserInput], destination: OnboardingState)] {
         guard let transitions = transitions[state] else {
@@ -119,9 +121,6 @@ enum OnboardingState: Equatable, Hashable {
     case thirdSegment
     case thirdSegmentNeedsWork
     case thirdSegmentComplete
-    case flipObject
-    case flipObjectASecondTime
-    case flippingObjectNotRecommended
     case captureFromLowerAngle
     case captureFromHigherAngle
     case reconstruction
@@ -130,15 +129,12 @@ enum OnboardingState: Equatable, Hashable {
 }
 
 /// User inputs on the review screens.
-enum OnboardingUserInput: Equatable {
-    case `continue`(isFlippable: Bool)
-    case skip(isFlippable: Bool)
-    case finish
-    case objectCannotBeFlipped
-    case flipObjectAnyway
-    case saveDraft
-}
-
+  enum OnboardingUserInput: Equatable {
+      case `continue`
+      case skip
+      case finish
+      case saveDraft
+  }
 enum OnboardingError: Error {
     case noTransitionExists(for: OnboardingState)
     case invalidTransition(from: OnboardingState, input: OnboardingUserInput?)

@@ -96,11 +96,7 @@ private struct CaptureButton: View {
                     return LocalizedString.startCapture
             }
         } else {
-            if !appModel.isObjectFlipped {
-                return LocalizedString.startCapture
-            } else {
-                return LocalizedString.continue
-            }
+            return LocalizedString.continue
         }
     }
 

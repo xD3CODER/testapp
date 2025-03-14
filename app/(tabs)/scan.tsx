@@ -1,20 +1,33 @@
 import React, {useEffect, useState, useCallback, Suspense, lazy, useMemo} from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  Alert,
+  ScrollView,
+  ActivityIndicator,
+  Animated
+} from 'react-native';
 import { useRouter, Stack } from 'expo-router';
+import AnimatedFeedback from "@/components/AnimatedFeedback"
 import {
   ObjectCaptureView,
   CaptureModeType,
   eventEmitter,
-    addFeedbackListener,
-    addStateChangeListener,
+  addFeedbackListener,
+  addStateChangeListener,
   createCaptureSession,
   attachSessionToView,
   finishCapture,
   cancelCapture,
   detectObject,
   resetDetection,
-  getImageCount
+  getImageCount,
+  startCapture
 } from '@/modules/expo-object-capture';
+import add = Animated.add;
 
 // Composant de chargement
 const LoadingScreen = () => (
@@ -31,8 +44,6 @@ export default function ScanScreen() {
   const [imageCount, setImageCount] = useState(0);
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const [showDebug, setShowDebug] = useState(false);
-  const [isComponentReady, setIsComponentReady] = useState(false);
-
   // Fonction pour ajouter des logs de débogage
   const addLog = useCallback((message: string) => {
     console.log(message); // Toujours afficher dans la console
@@ -51,17 +62,17 @@ export default function ScanScreen() {
       if (!sessionCreated) {
         throw new Error("Impossible de créer la session de capture");
       }
+      setTimeout(async () => {
+        // Attacher la session à la vue
+        const sessionAttached = await attachSessionToView();
+        if (!sessionAttached) {
+          throw new Error("Impossible d'attacher la session à la vue");
+        }
+        addLog(`Session attachée: ${sessionAttached}`);
+      }, 250)
 
-      // Attacher la session à la vue
-      const sessionAttached = await attachSessionToView();
-      addLog(`Session attachée: ${sessionAttached}`);
 
-      if (!sessionAttached) {
-        throw new Error("Impossible d'attacher la session à la vue");
-      }
 
-      // Indiquer que le composant est prêt
-      setIsComponentReady(true);
       addLog("Session de capture initialisée avec succès");
 
     } catch (error) {
@@ -76,12 +87,26 @@ export default function ScanScreen() {
     try {
       addLog("Démarrage de la détection d'objet...");
       const success = await detectObject();
+      if (!success) {
+        alert("object not found , " + state)
+      }
       addLog(`Résultat de la détection: ${success ? "Réussi" : "Échec"}`);
     } catch (error) {
       addLog(`Erreur de détection: ${error}`);
       Alert.alert("Erreur", `Une erreur est survenue lors de la détection: ${error}`);
     }
-  }, [addLog]);
+  }, [addLog, state]);
+
+  const handleCancelDetection = useCallback(async () => {
+    try {
+      addLog("Annulation de la détection...");
+      const success = await resetDetection();
+      addLog(`resetDetection résultat: ${success}`);
+    } catch (error) {
+      addLog(`Erreur d'annulation: ${error}`);
+      Alert.alert('Erreur', `Une erreur est survenue lors de l'annulation de la détection: ${error}`);
+    }
+  }, [addLog])
 
   // Terminer la capture
   const handleFinishCapture = useCallback(async () => {
@@ -121,53 +146,52 @@ export default function ScanScreen() {
     setShowDebug(prev => !prev);
   }, []);
 
-  // Tester l'envoi d'événements
-  const testEvents = useCallback(async () => {
-    try {
-      addLog("Simulation locale d'un événement de feedback");
-      // Simuler un événement localement
-      setFeedbackMessages(["Message de test local: " + new Date().toISOString()]);
-    } catch (error) {
-      addLog(`Erreur de test d'événement: ${error}`);
-    }
-  }, [addLog]);
-
   // Configuration des écouteurs et initialisation
   useEffect(() => {
-    addLog("Composant monté - configuration des écouteurs...");
 
-    // Configurer les écouteurs d'événements
-    const stateListener = addStateChangeListener((event) => {
-      addLog(`État changé: ${event.state}`);
-      setState(event.state);
-
-      // Mettre à jour le compte d'images si on est en mode capture
-      if (event.state === 'capturing') {
-        setImageCount(getImageCount());
-      }
-    });
-    const feedBackListener = addFeedbackListener((event) => {
-      console.debug(event)
-    })
-    const modelCompleteListener = eventEmitter.addListener('onModelComplete', (event) => {
-      addLog(`Modèle terminé: ${event.modelPath}`);
-      handleComplete(event.modelPath, event.previewPath);
-    });
-
-    const errorListener = eventEmitter.addListener('onError', (event) => {
-      addLog(`Erreur: ${event.message}`);
-      Alert.alert("Erreur", event.message);
-    });
-
+    let stateListener = null
+    let modelCompleteListener = null
+    let feedBackListener = null
+    let errorListener = null
     // Initialiser la capture après la configuration des écouteurs
-    initializeCapture();
+    initializeCapture().then(r => {
+      addLog("Composant monté - configuration des écouteurs...");
+
+      // Configurer les écouteurs d'événements
+      stateListener = addStateChangeListener((event) => {
+        addLog(`État changé: ${event.state}`);
+        setState(event.state);
+
+        // Mettre à jour le compte d'images si on est en mode capture
+        if (event.state === 'capturing') {
+          setImageCount(getImageCount());
+        }
+      });
+      feedBackListener = addFeedbackListener((event) => {
+        setFeedbackMessages(event.messages);
+      })
+      modelCompleteListener = eventEmitter.addListener('onModelComplete', (event) => {
+        addLog(`Modèle terminé: ${event.modelPath}`);
+        handleComplete(event.modelPath, event.previewPath);
+      });
+
+      errorListener = eventEmitter.addListener('onError', (event) => {
+        addLog(`Erreur: ${event.message}`);
+        Alert.alert("Erreur", event.message);
+      });
+
+    });
 
     // Nettoyage à la destruction du composant
     return () => {
       addLog("Démontage du composant - nettoyage des écouteurs");
+      if(stateListener)
       stateListener.remove();
+      if (modelCompleteListener)
       modelCompleteListener.remove();
+      if(errorListener)
       errorListener.remove();
+      if(feedBackListener)
       feedBackListener.remove()
 
       // Annuler la capture si nécessaire
@@ -178,9 +202,9 @@ export default function ScanScreen() {
   }, [initializeCapture, handleComplete, handleCancel, addLog]);
 
   // Vérifier si on doit afficher le loader en fonction de l'état
-  const isLoading = !isComponentReady || state === 'initializing';
 
-  const CaptureView = useMemo(() => ( <ObjectCaptureView
+  const CaptureView = useMemo(() => (
+      <ObjectCaptureView
               style={styles.captureView}
               captureMode={CaptureModeType.OBJECT}
             />
@@ -188,7 +212,7 @@ export default function ScanScreen() {
 
   return (
     <View style={styles.container}>
-      {1==2 ? (
+      {state === 'initializing' ? (
         <LoadingScreen />
       ) : (
         <SafeAreaView style={styles.container}>
@@ -205,9 +229,7 @@ export default function ScanScreen() {
 
           {/* Messages de feedback */}
           <View style={styles.feedbackContainer}>
-            {feedbackMessages.map((message, index) => (
-              <Text key={index} style={styles.feedbackText}>{message}</Text>
-            ))}
+            <AnimatedFeedback messages={feedbackMessages} />
           </View>
 
           {/* Zone de débogage */}
@@ -230,11 +252,28 @@ export default function ScanScreen() {
 
           {/* Contrôles de capture */}
           <View style={styles.controlsContainer}>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={handleDetectObject}>
-              <Text style={styles.buttonText}>Détecter l'objet</Text>
-            </TouchableOpacity>
+            {state == "ready" && (
+                <TouchableOpacity
+                    style={styles.button}
+                    onPress={handleDetectObject}>
+                  <Text style={styles.buttonText}>Détecter l'objet</Text>
+                </TouchableOpacity>
+            )}
+            {state == "detecting" && (
+                <>
+                  <TouchableOpacity
+                      style={styles.button}
+                      onPress={startCapture}>
+                    <Text style={styles.buttonText}>Démarrer la capture</Text>
+                  </TouchableOpacity>
+              <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={handleCancelDetection}>
+                <Text style={styles.buttonText}>Annuler</Text>
+                </TouchableOpacity>
+
+              </>
+                )}
 
             {state === 'capturing' && (
               <TouchableOpacity
@@ -243,12 +282,6 @@ export default function ScanScreen() {
                 <Text style={styles.buttonText}>Terminer la capture</Text>
               </TouchableOpacity>
             )}
-
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={handleCancel}>
-              <Text style={styles.buttonText}>Annuler</Text>
-            </TouchableOpacity>
           </View>
         </SafeAreaView>
       )}
@@ -277,9 +310,7 @@ const styles = StyleSheet.create({
     top: 150,
     left: 0,
     right: 0,
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 15,
+    alignItems: 'center'
   },
   feedbackText: {
     color: 'white',

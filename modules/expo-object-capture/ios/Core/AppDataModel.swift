@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample's licensing information.
+See the LICENSE.txt file for this sample’s licensing information.
 
 Abstract:
 A data model for maintaining the app state, including the underlying object capture state as well as any extra app state
@@ -9,13 +9,29 @@ A data model for maintaining the app state, including the underlying object capt
 import RealityKit
 import SwiftUI
 import os
-import ObjectiveC
 
-private let logger = Logger()
+private let logger = Logger(subsystem: ExpoGuidedCapture.subsystem,
+                            category: "AppDataModel")
 
 @MainActor
 @Observable
 class AppDataModel: Identifiable {
+    
+    private struct AssociatedKeys {
+           // Vos clés existantes...
+           static var expoModuleKey = "AppDataModelExpoModuleKey"
+       }
+
+       // Propriété pour stocker la référence au module
+       var expoModule: AnyObject? {
+           get {
+               return objc_getAssociatedObject(self, &AssociatedKeys.expoModuleKey) as? AnyObject
+           }
+           set {
+               objc_setAssociatedObject(self, &AssociatedKeys.expoModuleKey, newValue, .OBJC_ASSOCIATION_ASSIGN)
+           }
+       }
+    
     static let instance = AppDataModel()
 
     /// When we start the capture phase, this will be set to the correct locations in the captureFolderManager.
@@ -35,7 +51,7 @@ class AppDataModel: Identifiable {
     private(set) var photogrammetrySession: PhotogrammetrySession?
 
     /// When we start a new capture, the folder will be set here.
-    internal(set) var captureFolderManager: CaptureFolderManager?
+    private(set) var captureFolderManager: CaptureFolderManager?
 
     /// Shows whether the user decided to skip reconstruction.
     private(set) var isSaveDraftEnabled = false
@@ -62,19 +78,7 @@ class AppDataModel: Identifiable {
     }
 
     var orbit: Orbit = .orbit1
-    var isObjectFlipped: Bool = false
-
-    var hasIndicatedObjectCannotBeFlipped: Bool = false
-    var hasIndicatedFlipObjectAnyway: Bool = false
-    var isObjectFlippable: Bool {
-        // Override the objectNotFlippable feedback if the user has indicated
-        // the object cannot be flipped or if they want to flip the object anyway
-        guard !hasIndicatedObjectCannotBeFlipped else { return false }
-        guard !hasIndicatedFlipObjectAnyway else { return true }
-        guard let session = objectCaptureSession else { return true }
-        return !session.feedback.contains(.objectNotFlippable)
-    }
-
+    
     enum CaptureMode: Equatable {
         case object
         case area
@@ -91,11 +95,6 @@ class AppDataModel: Identifiable {
 
     // Shows whether the tutorial has played once during a session.
     var tutorialPlayedOnce = false
-
-    // Propriété pour stocker le delegate de feedback
-    private struct FeedbackDelegateKey {
-        static var key = "AppDataModelFeedbackDelegateKey"
-    }
 
     // Postpone creating ObjectCaptureSession and PhotogrammetrySession until necessary.
     private init() {
@@ -157,20 +156,6 @@ class AppDataModel: Identifiable {
 }
 
 extension AppDataModel {
- private struct AssociatedKeys {
-        // Vos clés existantes...
-        static var expoModuleKey = "AppDataModelExpoModuleKey"
-    }
-
-    // Propriété pour stocker la référence au module
-    var expoModule: AnyObject? {
-        get {
-            return objc_getAssociatedObject(self, &AssociatedKeys.expoModuleKey) as? AnyObject
-        }
-        set {
-            objc_setAssociatedObject(self, &AssociatedKeys.expoModuleKey, newValue, .OBJC_ASSOCIATION_ASSIGN)
-        }
-    }
     private func attachListeners() {
         logger.debug("Attaching listeners...")
         guard let model = objectCaptureSession else {
@@ -210,9 +195,15 @@ extension AppDataModel {
             removeCaptureFolder()
         }
     }
+    func sendEventToJS(_ eventName: String, _ body: [String: Any]) {
+        guard let module = expoModule as? ExpoObjectCaptureModule else { return }
 
+        DispatchQueue.main.async {
+            module.sendEvent(eventName, body)
+        }
+    }
     // Should be called when a new capture is to be created, before the session will be needed.
-    private func startNewCapture() throws {
+    func startNewCapture() throws ->  ObjectCaptureSession {
         logger.log("startNewCapture() called...")
         if !ObjectCaptureSession.isSupported {
             preconditionFailure("ObjectCaptureSession is not supported on this device!")
@@ -242,6 +233,8 @@ extension AppDataModel {
         } else {
             state = .capturing
         }
+        
+        return session
     }
 
     private func switchToErrorState(error inError: Swift.Error) {
@@ -279,7 +272,6 @@ extension AppDataModel {
         captureFolderManager = nil
         showOverlaySheets = false
         orbit = .orbit1
-        isObjectFlipped = false
         currentFeedback = []
         messageList.removeAll()
         captureMode = .object
@@ -290,23 +282,7 @@ extension AppDataModel {
 
     private func onStateChanged(newState: ObjectCaptureSession.CaptureState) {
         logger.info("OCViewModel switched to state: \(String(describing: newState))")
-
-        // Convertir l'état en chaîne et envoyer l'événement
-        let stateString: String
-        switch newState {
-        case .initializing: stateString = "initializing"
-        case .ready: stateString = "ready"
-        case .detecting: stateString = "detecting"
-        case .capturing: stateString = "capturing"
-        case .finishing: stateString = "finishing"
-        case .completed: stateString = "completed"
-        case .failed(let error):
-            stateString = "failed"
-            sendEventToJS("onError", ["message": "\(error)"])
-        @unknown default: stateString = "unknown"
-        }
-
-        // Le reste de votre code existant...
+        sendEventToJS("onStateChanged", ["state": String(describing: newState)])
         if case .completed = newState {
             logger.log("ObjectCaptureSession moved in .completed state.")
             if isSaveDraftEnabled {
@@ -323,23 +299,10 @@ extension AppDataModel {
             } else {
                 switchToErrorState(error: error)
             }
-        } else {
-         print("sending state event to JS ", stateString)
-        // Envoyer l'événement d'état
-        sendEventToJS("onStateChanged", ["state": stateString])
-        }
-    }
-      func sendEventToJS(_ eventName: String, _ body: [String: Any]) {
-        guard let module = expoModule as? ExpoObjectCaptureModule else { return }
-
-        DispatchQueue.main.async {
-            module.sendEvent(eventName, body)
         }
     }
 
-   private func updateFeedbackMessages(for feedback: Set<Feedback>) {
-        // Votre code existant...
-
+    private func updateFeedbackMessages(for feedback: Set<Feedback>) {
         // Compare the incoming feedback with the previous feedback to find the intersection.
         let persistentFeedback = currentFeedback.intersection(feedback)
 
@@ -356,43 +319,18 @@ extension AppDataModel {
         for thisFeedback in feebackToAdd {
             if let feedbackString = FeedbackMessages.getFeedbackString(for: thisFeedback, captureMode: captureMode) {
                 messageList.add(feedbackString)
+            
             }
         }
-
         currentFeedback = feedback
-
-        // Notification du delegate avec les messages actuels
         var currentMessages: [String] = []
-        for thisFeedback in currentFeedback {
-            if let feedbackString = FeedbackMessages.getFeedbackString(for: thisFeedback, captureMode: captureMode) {
-                currentMessages.append(feedbackString)
-            }
-        }
-
-        // Envoyer l'événement de feedback à JavaScript
+          for thisFeedback in currentFeedback {
+              if let feedbackString = FeedbackMessages.getFeedbackString(for: thisFeedback, captureMode: captureMode) {
+                  currentMessages.append(feedbackString)
+              }
+          }
         sendEventToJS("onFeedbackChanged", ["messages": currentMessages])
-
-        // Toujours appeler le delegate si nécessaire
-        if let delegate = feedbackDelegate {
-            DispatchQueue.main.async {
-                delegate.didUpdateFeedback(messages: currentMessages)
-            }
-        }
-    }
-
-     func sendReconstructionProgress(progress: Double, stage: String? = nil) {
-        var eventBody: [String: Any] = ["progress": progress]
-        if let stage = stage {
-            eventBody["stage"] = stage
-        }
-        sendEventToJS("onProcessingProgress", eventBody)
-    }
-
-    func sendModelComplete(modelPath: String, previewPath: String) {
-        sendEventToJS("onModelComplete", [
-            "modelPath": modelPath,
-            "previewPath": previewPath
-        ])
+       
     }
 
     private func performStateTransition(from fromState: ModelState, to toState: ModelState) {

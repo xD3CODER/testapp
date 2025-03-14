@@ -3,8 +3,6 @@ import RealityKit
 import SwiftUI
 public class ExpoObjectCaptureView: ExpoView {
     private var hostingController: UIHostingController<AnyView>?
-    private var currentSession: ObjectCaptureSession?
-
     let onViewReady = EventDispatcher()
 
     required public init(appContext: AppContext? = nil) {
@@ -37,8 +35,6 @@ public class ExpoObjectCaptureView: ExpoView {
 
     public func setSession(_ session: ObjectCaptureSession?) {
         guard let session = session, #available(iOS 18.0, *) else { return }
-
-        currentSession = session
 
         // Vue combinée unique, enveloppée dans AnyView
         let captureView = UIHostingController(rootView:
