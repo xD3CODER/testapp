@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useCallback, Suspense, lazy, useMemo} from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,86 +6,124 @@ import {
   StyleSheet,
   SafeAreaView,
   Alert,
-  ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter, Link, useNavigation } from 'expo-router';
-import AnimatedFeedback from "@/components/AnimatedFeedback"
-import { useShakeAnimation } from "@/components/useShakeAnimation"
-import { useFadeAnimation } from "@/components/useFadeAnimation"
+import { useRouter } from 'expo-router';
+import AnimatedFeedback from "@/components/AnimatedFeedback";
+import { useShakeAnimation } from "@/components/useShakeAnimation";
+import { useFadeAnimation } from "@/components/useFadeAnimation";
 import {
   ObjectCaptureView,
   CaptureModeType,
-  eventEmitter,
-  addFeedbackListener,
-  addStateChangeListener,
-  createCaptureSession,
-  attachSessionToView,
-  navigateToReconstruction,
-  finishCapture,
-  cancelCapture,
-  detectObject,
-  resetDetection,
-  getImageCount,
-  startCapture, addCameraTrackingChangeListener, addNumberOfShootsChangeListener
+  CaptureState
 } from '@/modules/expo-object-capture';
 
-import Animated from "react-native-reanimated"
-import {AnimatedCounter} from "@/components/ImagesCounter";
+import {objectCaptureActions} from "@/hooks/useObjectCaptureActions"
+import {useObjectCaptureState} from "@/hooks/useObjectCapture"
+
+import Animated from "react-native-reanimated";
+import { AnimatedCounter } from "@/components/ImagesCounter";
 
 // Composant de chargement
 const LoadingScreen = () => (
-  <View style={styles.loadingContainer}>
-    <ActivityIndicator size="large" color="#2196F3" />
-    <Text style={styles.loadingText}>Initialisation de la caméra...</Text>
-  </View>
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color="#2196F3" />
+      <Text style={styles.loadingText}>Initialisation de la caméra...</Text>
+    </View>
 );
 
 export default function ScanScreen() {
   const router = useRouter();
-  const [state, setState] = useState<string>('initializing');
-  const [feedbackMessages, setFeedbackMessages] = useState<string[]>([]);
-  const [cameraTracking, setCameraTracking] = useState<string>('normal');
-  const [imageCount, setImageCount] = useState(0);
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const [showDebug, setShowDebug] = useState(false);
+
+  // Utiliser le hook pour gérer l'état de la capture
+  const {
+    state,
+    cameraTracking,
+    imageCount,
+    feedbackMessages,
+    isInitialized,
+    isInitializing,
+    error,
+    scanPassComplete,
+    setInitializationState,
+    clearError,
+    viewReady,
+      setOnViewReady
+  } = useObjectCaptureState();
+
+  // Utiliser les actions pour interagir avec le module natif
+  const {
+    initialize,
+    detectObject,
+    resetDetection,
+    startCapture,
+    finishCapture,
+    cancelCapture,
+    navigateToReconstruction
+  } = objectCaptureActions;
+
+  // Animation de secousse pour la détection d'objet
+  const { shake, animatedStyle } = useShakeAnimation(15);
+
   // Fonction pour ajouter des logs de débogage
   const addLog = useCallback((message: string) => {
     console.log(message); // Toujours afficher dans la console
     setDebugLog(prev => [message, ...prev.slice(0, 19)]);
   }, []);
-    const { shake, animatedStyle } = useShakeAnimation(15);
+
   // Initialisation de la session de capture
-  const initializeCapture = useCallback(async () => {
-    try {
-      addLog("Initialisation de la session de capture...");
+  useEffect(() => {
+    const initSession = async () => {
+      if (!viewReady) return; // Attendre que la vue soit prête
 
-      // Créer la session
-      const sessionCreated = await createCaptureSession();
-      addLog(`Session créée: ${sessionCreated}`);
+      setInitializationState(true, false);
 
-      if (!sessionCreated) {
-        throw new Error("Impossible de créer la session de capture");
-      }
-      setTimeout(async () => {
-        // Attacher la session à la vue
+      try {
+        // Étape 1: Créer la session
+        const sessionCreated = await createCaptureSession();
+        if (!sessionCreated) throw new Error("Impossible de créer la session");
+
+        // Attendre un peu pour s'assurer que la session est bien créée
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Étape 2: Attacher la session à la vue
         const sessionAttached = await attachSessionToView();
-        if (!sessionAttached) {
-          throw new Error("Impossible d'attacher la session à la vue");
-        }
-        addLog(`Session attachée: ${sessionAttached}`);
-      }, 250)
+        if (!sessionAttached) throw new Error("Impossible d'attacher la session");
 
+        setInitializationState(false, true);
+      } catch (error) {
+        console.error("Erreur d'initialisation:", error);
+        setInitializationState(false, false, String(error));
+      }
+    };
 
-
-      addLog("Session de capture initialisée avec succès");
-
-    } catch (error) {
-      addLog(`Erreur d'initialisation: ${error}`);
-      Alert.alert("Erreur", `Impossible d'initialiser la capture: ${error}`);
-      handleCancel();
+    if (viewReady) {
+      alert("")
+      initSession();
     }
-  }, [addLog]);
+  }, [viewReady]);
+
+  // Surveiller les erreurs et les afficher
+  useEffect(() => {
+    if (error) {
+      addLog(`Erreur détectée: ${error}`);
+      Alert.alert("Erreur", error, [
+        { text: "OK", onPress: clearError }
+      ]);
+    }
+  }, [error, clearError]);
+
+  // Gérer la complétion de la reconstruction
+  useEffect(() => {
+    if (state === CaptureState.RECONSTRUCTING) {
+      addLog("État de reconstruction détecté, navigation en cours...");
+      navigateToReconstruction().catch(err => {
+        addLog(`Erreur de navigation: ${err}`);
+      });
+    }
+  }, [state]);
 
   // Gérer la détection d'objet
   const handleDetectObject = useCallback(async () => {
@@ -93,15 +131,16 @@ export default function ScanScreen() {
       addLog("Démarrage de la détection d'objet...");
       const success = await detectObject();
       if (!success) {
-        shake()
+        shake();
       }
       addLog(`Résultat de la détection: ${success ? "Réussi" : "Échec"}`);
     } catch (error) {
       addLog(`Erreur de détection: ${error}`);
       Alert.alert("Erreur", `Une erreur est survenue lors de la détection: ${error}`);
     }
-  }, [addLog, state]);
+  }, [addLog, detectObject, shake]);
 
+  // Gérer l'annulation de la détection
   const handleCancelDetection = useCallback(async () => {
     try {
       addLog("Annulation de la détection...");
@@ -111,7 +150,7 @@ export default function ScanScreen() {
       addLog(`Erreur d'annulation: ${error}`);
       Alert.alert('Erreur', `Une erreur est survenue lors de l'annulation de la détection: ${error}`);
     }
-  }, [addLog])
+  }, [addLog, resetDetection]);
 
   // Terminer la capture
   const handleFinishCapture = useCallback(async () => {
@@ -127,16 +166,7 @@ export default function ScanScreen() {
       addLog(`Erreur de finalisation: ${error}`);
       Alert.alert('Erreur', `Une erreur est survenue lors de la finalisation de la capture: ${error}`);
     }
-  }, [addLog]);
-
-  // Gérer la complétion
-  const handleComplete = useCallback((modelPath: string, previewPath: string) => {
-    Alert.alert(
-      "Capture terminée",
-      `Modèle créé avec succès!\nChemin: ${modelPath}`,
-      [{ text: "OK", onPress: () => router.back() }]
-    );
-  }, [router]);
+  }, [addLog, finishCapture]);
 
   // Gérer l'annulation
   const handleCancel = useCallback(() => {
@@ -144,122 +174,54 @@ export default function ScanScreen() {
       console.error("Erreur lors de l'annulation de la capture:", err);
     });
     router.back();
-  }, [router]);
+  }, [router, cancelCapture]);
 
   // Afficher/masquer le débogage
   const handleToggleDebug = useCallback(() => {
     setShowDebug(prev => !prev);
   }, []);
 
-  // Configuration des écouteurs et initialisation
-  useEffect(() => {
+  // Animation de fondu basée sur l'état du tracking caméra
+  const fadeStyle = useFadeAnimation(cameraTracking === "normal", {
+    duration: 400,
+    targetOpacity: 0.9
+  });
 
-    let cameraTrackingListener = null
-    let stateListener = null
-    let shootListenr = null
-    let modelCompleteListener = null
-    let feedBackListener = null
-    let errorListener = null
-    // Initialiser la capture après la configuration des écouteurs
-    initializeCapture().then(r => {
-      addLog("Composant monté - configuration des écouteurs...");
-
-      cameraTrackingListener = addCameraTrackingChangeListener(async (event) => {
-        setCameraTracking(event.state);
-        addLog(`Camera Tracking: ${event.state}`);
-      })
-
-      shootListenr = addNumberOfShootsChangeListener(async (numberOfPictures) => {
-         addLog(`Nombre de photos: ${numberOfPictures}`)
-         setImageCount(numberOfPictures.number);
-      })
-      // Configurer les écouteurs d'événements
-      stateListener = addStateChangeListener(async (event) => {
-        addLog(`État changé: ${event.state}`);
-        if(event.state == "reconstructing") {
-           const reconstrctution = await navigateToReconstruction();
-            if (!reconstrctution) {
-              throw new Error("Impossible d'attacher la session à la vue");
-            }
-        }
-        setState(event.state);
-
-        // Mettre à jour le compte d'images si on est en mode capture
-        if (event.state === 'capturing') {
-          setImageCount(getImageCount());
-        }
-      });
-      feedBackListener = addFeedbackListener((event) => {
-        setFeedbackMessages(event.messages);
-      })
-      modelCompleteListener = eventEmitter.addListener('onModelComplete', (event) => {
-        addLog(`Modèle terminé: ${event.modelPath}`);
-        handleComplete(event.modelPath, event.previewPath);
-      });
-
-      errorListener = eventEmitter.addListener('onError', (event) => {
-        addLog(`Erreur: ${event.message}`);
-        Alert.alert("Erreur", event.message);
-      });
-
-    });
-
-    // Nettoyage à la destruction du composant
-    return () => {
-      addLog("Démontage du composant - nettoyage des écouteurs");
-      if(cameraTrackingListener)
-        cameraTrackingListener.remove()
-      if(stateListener)
-      stateListener.remove();
-      if (modelCompleteListener)
-      modelCompleteListener.remove();
-      if(errorListener)
-      errorListener.remove();
-      if(feedBackListener)
-      feedBackListener.remove()
-
-      // Annuler la capture si nécessaire
-      cancelCapture().catch(err => {
-        console.error("Erreur lors de l'annulation de la capture:", err);
-      });
-    };
-  }, [initializeCapture, handleComplete, handleCancel, addLog]);
-
-  // Vérifier si on doit afficher le loader en fonction de l'état
-
-    const fadeStyle = useFadeAnimation(cameraTracking === "normal", {
-      duration: 400,
-      targetOpacity: 0.9
-    });
-
+  // Mémoriser la vue de capture pour éviter les re-rendus inutiles
   const CaptureView = useMemo(() => (
       <ObjectCaptureView
-              style={styles.captureView}
-              captureMode={CaptureModeType.OBJECT}
-            />
-  ), [])
+          style={styles.captureView}
+          captureMode={CaptureModeType.OBJECT}
+          onViewReady={() => console.warn("ready")}
+      />
+  ), []);
+
+  // Afficher l'écran de chargement pendant l'initialisation
+
 
   return (
-    <View style={styles.container}>
-      {state === 'initializing' ? (
-        <LoadingScreen />
-      ) : (
+      <View style={styles.container}>
         <SafeAreaView style={styles.container}>
 
           <View style={styles.captureViewContainer}>
-            {CaptureView}
+            <ObjectCaptureView
+                style={styles.captureView}
+                captureMode={CaptureModeType.OBJECT}
+                onViewReady={() => console.warn("ready")}
+            />
           </View>
+
           <View style={{position: 'absolute', zIndex: 222222}}>
             <TouchableOpacity
-                  onPress={() => router.navigate("scanPasses")}>
-                <Text style={styles.buttonText}>BACK</Text>
-                </TouchableOpacity>
+                onPress={() => router.navigate("scanPasses")}>
+              <Text style={styles.buttonText}>BACK</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Bouton de débogage en haut à droite */}
           <TouchableOpacity
-            style={styles.debugButton}
-            onPress={handleToggleDebug}>
+              style={styles.debugButton}
+              onPress={handleToggleDebug}>
             <Text style={styles.debugButtonText}>Debug</Text>
           </TouchableOpacity>
 
@@ -270,74 +232,69 @@ export default function ScanScreen() {
 
           {/* Zone de débogage */}
           {showDebug && (
-            <View style={styles.debugContainer}>
-              <Text style={styles.debugTitle}>État actuel: {state}</Text>
-              <ScrollView style={styles.debugScroll}>
-                {debugLog.map((log, index) => (
-                  <Text key={index} style={styles.debugText}>{log}</Text>
-                ))}
-              </ScrollView>
-              <TouchableOpacity
-                style={styles.testButton}
-                onPress={navigateToReconstruction}>
-                <Text style={styles.buttonText}>Tester les événements</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          <TouchableOpacity
-                style={styles.testButton}
-                onPress={navigateToReconstruction}>
-                <Text style={styles.buttonText}>Tester les événements</Text>
-              </TouchableOpacity>
-          {/* Contrôles de capture */}
-           <Animated.View style={[styles.controlsContainer, fadeStyle]}>
-             <>
-            {state == "ready" && (
-                <Animated.View style={[animatedStyle]} >
+              <View style={styles.debugContainer}>
+                <Text style={styles.debugTitle}>État actuel: {state}</Text>
+                <View style={styles.debugScroll}>
+                  {debugLog.map((log, index) => (
+                      <Text key={index} style={styles.debugText}>{log}</Text>
+                  ))}
+                </View>
                 <TouchableOpacity
-                    style={styles.button}
-                    onPress={handleDetectObject}>
-                  <Text style={styles.buttonText}>Détecter l'objet</Text>
+                    style={styles.testButton}
+                    onPress={navigateToReconstruction}>
+                  <Text style={styles.buttonText}>Tester les événements</Text>
                 </TouchableOpacity>
-                 </Animated.View>
-            )}
-            {state == "detecting" && (
-                <View>
-
-                  <TouchableOpacity
-                      style={styles.button}
-                      onPress={startCapture}>
-                    <Text style={styles.buttonText}>Démarrer la capture</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                      style={styles.cancelButton}
-                      onPress={handleCancelDetection}>
-                    <Text style={styles.buttonText}>Annuler</Text>
-                    </TouchableOpacity>
               </View>
-                )}
+          )}
 
-            {state === 'capturing' && (
-                <View style={{flexDirection: "column",  flex: 1, width: "100%"}}>
-                  <View style={{flex: 1, flexDirection: "row", justifyContent: "center", alignItems: "center"}}>
-                      <TouchableOpacity
-                    style={styles.button}
-                    onPress={handleFinishCapture}>
-                    <Text style={styles.buttonText}>Terminer</Text>
-                  </TouchableOpacity>
+          {/* Contrôles de capture */}
+          <Animated.View style={[styles.controlsContainer, fadeStyle]}>
+            <>
+              {state === CaptureState.READY && (
+                  <Animated.View style={[animatedStyle]}>
+                    <TouchableOpacity
+                        style={styles.button}
+                        onPress={handleDetectObject}>
+                      <Text style={styles.buttonText}>Détecter l'objet</Text>
+                    </TouchableOpacity>
+                  </Animated.View>
+              )}
+
+              {state === CaptureState.DETECTING && (
+                  <View>
+                    <TouchableOpacity
+                        style={styles.button}
+                        onPress={startCapture}>
+                      <Text style={styles.buttonText}>Démarrer la capture</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={handleCancelDetection}>
+                      <Text style={styles.buttonText}>Annuler</Text>
+                    </TouchableOpacity>
                   </View>
-                  <View style={{flex: 1, flexDirection: "row", paddingHorizontal: 10}}>
-                    <View style={{backgroundColor: "#00000044", borderRadius: 400}}>
-                       <AnimatedCounter current={imageCount} size={12}/>
+              )}
+
+              {state === CaptureState.CAPTURING && (
+                  <View style={{flexDirection: "column", flex: 1, width: "100%"}}>
+                    <View style={{flex: 1, flexDirection: "row", justifyContent: "center", alignItems: "center"}}>
+                      <TouchableOpacity
+                          style={styles.button}
+                          onPress={handleFinishCapture}>
+                        <Text style={styles.buttonText}>Terminer</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={{flex: 1, flexDirection: "row", paddingHorizontal: 10}}>
+                      <View style={{backgroundColor: "#00000044", borderRadius: 400}}>
+                        <AnimatedCounter current={imageCount} size={12}/>
+                      </View>
                     </View>
                   </View>
-                  </View>
-            )}
-             </>
-           </Animated.View>
+              )}
+            </>
+          </Animated.View>
         </SafeAreaView>
-      )}
-    </View>
+      </View>
   );
 }
 

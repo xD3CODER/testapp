@@ -2,12 +2,13 @@ import { requireNativeModule, EventEmitter } from 'expo-modules-core';
 import {
   StateChangeEvent,
   FeedbackEvent,
-  ProgressEvent,
+  AnyObjectCaptureEvent,
+  EventType,
   ModelCompleteEvent,
   ErrorEvent,
   ObjectCaptureOptions,
   ObjectCaptureResult,
-  CaptureModeType, CameraTrackingChangeEvent, NumberOfShootsChangeEvent
+  CaptureModeType, CameraTrackingState, CaptureState,
 } from './ExpoObjectCapture.types';
 
 // Tentative d'obtenir le module natif
@@ -86,6 +87,59 @@ export function addErrorListener(callback: (event: ErrorEvent) => void) {
   return eventEmitter.addListener('onError', callback);
 }
 
+export function addObjectCaptureEventListener(
+    callback: (event: AnyObjectCaptureEvent) => void
+) {
+  return eventEmitter.addListener('onObjectCaptureEvent', (rawEvent: { eventType: EventType, data: any }) => {
+    // Transformer les données brutes en événements typés
+    let typedEvent: AnyObjectCaptureEvent;
+    console.log('Événement brut reçu:', JSON.stringify(rawEvent));
+
+    switch (rawEvent.eventType) {
+      case EventType.STATE:
+        typedEvent = {
+          eventType: EventType.STATE,
+          data: rawEvent.data as CaptureState
+        };
+        break;
+
+      case EventType.FEEDBACK:
+        typedEvent = {
+          eventType: EventType.FEEDBACK,
+          data: rawEvent.data as string[]
+        };
+        break;
+
+      case EventType.CAMERA_TRACKING:
+        typedEvent = {
+          eventType: EventType.CAMERA_TRACKING,
+          data: rawEvent.data as CameraTrackingState
+        };
+        break;
+
+      case EventType.NUMBER_OF_SHOTS:
+        typedEvent = {
+          eventType: EventType.NUMBER_OF_SHOTS,
+          data: rawEvent.data as number
+        };
+        break;
+
+      case EventType.SCAN_PASS_COMPLETE:
+        typedEvent = {
+          eventType: EventType.SCAN_PASS_COMPLETE,
+          data: rawEvent.data as boolean
+        };
+        break;
+
+      default:
+        // Gestion de cas par défaut
+        typedEvent = rawEvent as unknown as AnyObjectCaptureEvent;
+    }
+
+    callback(typedEvent);
+  });
+}
+
 export function removeAllListeners() {
   eventEmitter.removeAllListeners('onStateChanged');
   eventEmitter.removeAllListeners('onFeedbackChanged');
@@ -107,6 +161,7 @@ export default {
   cancelCapture,
   resetDetection,
   removeAllListeners,
+  addObjectCaptureEventListener,
   addNumberOfShootsChangeListener,
   addStateChangeListener,
   addFeedbackListener,

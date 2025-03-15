@@ -2,7 +2,7 @@ import ExpoObjectCaptureModule from './src/ExpoObjectCaptureModule';
 export default ExpoObjectCaptureModule;
 
 // Exporter la vue native
-export {  ObjectCaptureView } from "./src/ExpoObjectCaptureView"
+export { ObjectCaptureView } from "./src/ExpoObjectCaptureView";
 
 // Exporter l'émetteur d'événements
 export { eventEmitter } from './src/ExpoObjectCaptureModule';
@@ -17,29 +17,36 @@ export {
   cancelCapture,
   resetDetection,
   detectObject,
-  addStateChangeListener,
-  addFeedbackListener,
-    navigateToReconstruction,
-    addCameraTrackingChangeListener,
-    addNumberOfShootsChangeListener,
+  navigateToReconstruction,
   addProgressListener,
   addModelCompleteListener,
+  addObjectCaptureEventListener,
   addErrorListener,
   removeAllListeners
 } from './src/ExpoObjectCaptureModule';
 
 // Exporter les types et enums
-export type {
+export {
+  AnyObjectCaptureEvent,
+  CaptureState,
+  CameraTrackingState,
+  EventType,
+  ObjectCaptureEvent,
   StateChangeEvent,
   FeedbackEvent,
-  ProgressEvent,
+  CameraTrackingEvent,
+  ScanPassCompleteEvent,
+  NumberOfShotsEvent,
+  ObjectCaptureOptions,
+  ObjectCaptureResult,
+  ProgressInfo,
   ModelCompleteEvent,
   ErrorEvent,
-  ObjectCaptureOptions,
-  ObjectCaptureResult
+  CaptureModeType,
+  ObjectCaptureState,
+  ObjectCaptureActions,
+  ObjectCaptureHook
 } from './src/ExpoObjectCapture.types';
-
-export { CaptureModeType } from './src/ExpoObjectCapture.types';
 
 // Exporter des méthodes de l'instance pour la compatibilité
 export const {

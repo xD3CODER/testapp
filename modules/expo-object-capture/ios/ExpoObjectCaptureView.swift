@@ -29,10 +29,10 @@ public class ExpoObjectCaptureView: ExpoView {
         addSubview(initialView.view)
         hostingController = initialView
 
-        // Signaler que la vue est prête
-        DispatchQueue.main.async {
-            self.onViewReady([:])
-        }
+   
+        print("CALL EVENT")
+        onViewReady()
+        
     }
 public func setReconstructionView() {
     print("SETTING RECONSTRUCTION VIEW")

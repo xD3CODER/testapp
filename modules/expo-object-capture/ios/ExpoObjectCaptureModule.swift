@@ -297,15 +297,11 @@ public class ExpoObjectCaptureModule: Module {
         Name("ExpoObjectCapture")
 
         // Définir les événements
-        Events("onStateChanged", "onFeedbackChanged", "onProcessingProgress", "onShoot", "onModelComplete", "onError", "onViewReady", "onCameraTrackingChanged", "onObjectCaptureEvent")
-
-        // Initialiser après création
-        OnCreate {
-         
-        }
+        Events("onStateChanged", "onFeedbackChanged", "onProcessingProgress", "onShoot", "onModelComplete", "onError", "onCameraTrackingChanged", "onObjectCaptureEvent")
 
         // Définir la vue
         View(ExpoObjectCaptureView.self) {
+            Events("onViewReady")
             // Propriétés de la vue
             Prop("captureMode") { (view: ExpoObjectCaptureView, captureMode: String) in
                 Task { @MainActor in
@@ -316,6 +312,8 @@ public class ExpoObjectCaptureModule: Module {
                     }
                 }
             }
+
+
         }
     
 

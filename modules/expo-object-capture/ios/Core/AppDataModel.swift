@@ -191,14 +191,14 @@ extension AppDataModel {
             for await cameraTracking in model.cameraTrackingUpdates {
                 logger.debug("Task got async camera state change to: \(String(describing: cameraTracking))")
               
-                sendEventToJS("onObjectCaptureEvent", ["type": jsEventType.cameraTracking, "data": convertCameraTrackingStateToString(cameraTracking)])
+                sendEventToJS("onObjectCaptureEvent", ["eventType": jsEventType.cameraTracking, "data": convertCameraTrackingStateToString(cameraTracking)])
             }
             logger.log("^^^ Got nil from cameraTracking iterator!  Ending observation task...")
         })
         tasks.append(Task<Void, Never> { [weak self] in
             for await numberOfShots in model.numberOfShotsTakenUpdates {
                 logger.debug("Task got async camera shhot  change to: \(String(describing: numberOfShots))")
-                sendEventToJS("onObjectCaptureEvent", ["type": jsEventType.numberOfShots ,"data": numberOfShots])
+                sendEventToJS("onObjectCaptureEvent", ["eventType": jsEventType.numberOfShots ,"data": numberOfShots])
             }
             logger.log("^^^ Got nil from cameraTracking iterator!  Ending observation task...")
         })
@@ -222,16 +222,26 @@ extension AppDataModel {
     func sendEventToJS(_ eventName: String, _ body: [String: Any]) {
         guard let module = expoModule as? ExpoObjectCaptureModule else { return }
 
-        DispatchQueue.main.async {
-            module.sendEvent(eventName, body)
+       
+        var processedBody = body
+
+        // Convertir le type d'événement de l'enum en chaîne
+        if let eventType = body["eventType"] as? jsEventType {
+            // Remplacer l'enum par la chaîne
+            processedBody["eventType"] = eventType.rawValue
         }
+
+        DispatchQueue.main.async {
+            module.sendEvent(eventName, processedBody)
+        }
+    
     }
-    enum jsEventType {
-        case feedback
-        case state
-        case cameraTracking
-        case scanPassComplete
-        case numberOfShots
+    enum jsEventType: String {
+        case feedback = "feedback"
+       case state = "state"
+       case cameraTracking = "cameraTracking"
+       case scanPassComplete = "scanPassComplete"
+       case numberOfShots = "numberOfShots"
     }
     // Should be called when a new capture is to be created, before the session will be needed.
     func startNewCapture() throws ->  ObjectCaptureSession {
@@ -294,7 +304,7 @@ extension AppDataModel {
             configuration: configuration)
 
         state = .reconstructing
-         sendEventToJS("onObjectCaptureEvent", ["type": jsEventType.state, "data": "reconstructing"])
+         sendEventToJS("onObjectCaptureEvent", ["eventType": jsEventType.state, "data": "reconstructing"])
     }
 
     private func reset() {
@@ -314,7 +324,7 @@ extension AppDataModel {
 
     private func onStateChanged(newState: ObjectCaptureSession.CaptureState) {
         logger.info("OCViewModel switched to state: \(String(describing: newState))")
-        sendEventToJS("onObjectCaptureEvent", ["type": jsEventType.state, "data": String(describing: newState)])
+        sendEventToJS("onObjectCaptureEvent", ["eventType": jsEventType.state, "data": String(describing: newState)])
         if case .completed = newState {
             logger.log("ObjectCaptureSession moved in .completed state.")
             if isSaveDraftEnabled {
@@ -361,7 +371,7 @@ extension AppDataModel {
                   currentMessages.append(feedbackString)
               }
           }
-        sendEventToJS("onObjectCaptureEvent", ["type": jsEventType.feedback, "data": currentMessages])
+        sendEventToJS("onObjectCaptureEvent", ["eventType": jsEventType.feedback, "data": currentMessages])
        
     }
 
