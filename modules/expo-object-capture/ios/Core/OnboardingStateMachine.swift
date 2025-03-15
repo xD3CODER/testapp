@@ -50,7 +50,6 @@ class OnboardingStateMachine {
 
     // Allowed initial states.
     private let initialStates: [OnboardingState] = [.tooFewImages, .firstSegmentNeedsWork, .firstSegmentComplete,
-                                                    .secondSegmentNeedsWork, .secondSegmentComplete,
                                                     .thirdSegmentNeedsWork, .thirdSegmentComplete, .captureInAreaMode]
 
     // State transitions based on the user input.
@@ -59,25 +58,11 @@ class OnboardingStateMachine {
 
        .firstSegmentNeedsWork: [
            (inputs: [.continue], destination: .firstSegment),
-           (inputs: [.skip], destination: .captureFromLowerAngle)
+           (inputs: [.skip], destination: .captureFromHigherAngle)
        ],
 
        .firstSegmentComplete: [
            (inputs: [.finish], destination: .reconstruction),
-           (inputs: [.continue], destination: .captureFromLowerAngle)
-       ],
-
-       .captureFromLowerAngle: [
-           (inputs: [.finish], destination: .reconstruction),
-           (inputs: [.continue], destination: .additionalOrbitOnCurrentSegment)
-       ],
-
-       .secondSegmentNeedsWork: [
-           (inputs: [.continue], destination: .dismiss),
-           (inputs: [.skip], destination: .captureFromHigherAngle)
-       ],
-
-       .secondSegmentComplete: [
            (inputs: [.continue], destination: .captureFromHigherAngle)
        ],
 
@@ -115,9 +100,6 @@ enum OnboardingState: Equatable, Hashable {
     case firstSegment
     case firstSegmentNeedsWork
     case firstSegmentComplete
-    case secondSegment
-    case secondSegmentNeedsWork
-    case secondSegmentComplete
     case thirdSegment
     case thirdSegmentNeedsWork
     case thirdSegmentComplete

@@ -9,7 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Link, useNavigation } from 'expo-router';
 import AnimatedFeedback from "@/components/AnimatedFeedback"
 import { useShakeAnimation } from "@/components/useShakeAnimation"
 import { useFadeAnimation } from "@/components/useFadeAnimation"
@@ -251,7 +251,7 @@ export default function ScanScreen() {
           </View>
           <View style={{position: 'absolute', zIndex: 222222}}>
             <TouchableOpacity
-                  onPress={() => alert("")}>
+                  onPress={() => router.navigate("scanPasses")}>
                 <Text style={styles.buttonText}>BACK</Text>
                 </TouchableOpacity>
           </View>

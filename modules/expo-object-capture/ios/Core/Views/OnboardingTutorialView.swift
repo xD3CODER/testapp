@@ -138,8 +138,6 @@ struct OnboardingTutorialView: View {
         .tooFewImages: LocalizedString.tooFewImagesTitle,
         .firstSegmentNeedsWork: LocalizedString.firstSegmentNeedsWorkTitle,
         .firstSegmentComplete: LocalizedString.firstSegmentCompleteTitle,
-        .secondSegmentNeedsWork: LocalizedString.secondSegmentNeedsWorkTitle,
-        .secondSegmentComplete: LocalizedString.secondSegmentCompleteTitle,
         .thirdSegmentNeedsWork: LocalizedString.thirdSegmentNeedsWorkTitle,
         .thirdSegmentComplete: LocalizedString.thirdSegmentCompleteTitle,
 
@@ -156,8 +154,6 @@ struct OnboardingTutorialView: View {
         .tooFewImages: String(format: LocalizedString.tooFewImagesDetailText, AppDataModel.minNumImages),
         .firstSegmentNeedsWork: LocalizedString.firstSegmentNeedsWorkDetailText,
         .firstSegmentComplete: LocalizedString.firstSegmentCompleteDetailText,
-        .secondSegmentNeedsWork: LocalizedString.secondSegmentNeedsWorkDetailText,
-        .secondSegmentComplete: LocalizedString.secondSegmentCompleteDetailText,
         .thirdSegmentNeedsWork: LocalizedString.thirdSegmentNeedsWorkDetailText,
         .thirdSegmentComplete: LocalizedString.thirdSegmentCompleteDetailText,
         .captureFromLowerAngle: LocalizedString.captureFromLowerAngleDetailText,

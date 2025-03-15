@@ -297,7 +297,7 @@ public class ExpoObjectCaptureModule: Module {
         Name("ExpoObjectCapture")
 
         // Définir les événements
-        Events("onStateChanged", "onFeedbackChanged", "onProcessingProgress", "onShoot", "onModelComplete", "onError", "onViewReady", "onCameraTrackingChanged")
+        Events("onStateChanged", "onFeedbackChanged", "onProcessingProgress", "onShoot", "onModelComplete", "onError", "onViewReady", "onCameraTrackingChanged", "onObjectCaptureEvent")
 
         // Initialiser après création
         OnCreate {

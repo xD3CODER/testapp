@@ -68,7 +68,6 @@ struct OnboardingButtonView: View {
                     })
                 }
                 if onboardingStateMachine.currentState == OnboardingState.tooFewImages ||
-                    onboardingStateMachine.currentState == .secondSegmentComplete  ||
                     onboardingStateMachine.currentState == .thirdSegmentComplete {
                     CreateButton(buttonLabel: "", action: {})
                 }
@@ -90,7 +89,7 @@ struct OnboardingButtonView: View {
         switch onboardingStateMachine.currentState {
             case .firstSegment, .dismiss:
                 showOnboardingView = false
-            case .secondSegment, .thirdSegment, .additionalOrbitOnCurrentSegment:
+            case .thirdSegment, .additionalOrbitOnCurrentSegment:
                 beginNewOrbitOrSection()
             default:
                 break

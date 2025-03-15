@@ -7,19 +7,19 @@ Orbit support for the app data model.
 
 extension AppDataModel {
     enum Orbit: Int, CaseIterable, Identifiable, Comparable {
-        case orbit1, orbit2, orbit3
+        case orbit1, orbit3
 
         var id: Int {
             rawValue
         }
 
         var image: String {
-            let imagesByIndex = ["1.circle", "2.circle", "3.circle"]
+            let imagesByIndex = ["1.circle", "3.circle"]
             return imagesByIndex[id]
         }
 
         var imageSelected: String {
-            let imagesByIndex = ["1.circle.fill", "2.circle.fill", "3.circle.fill"]
+            let imagesByIndex = ["1.circle.fill", "3.circle.fill"]
             return imagesByIndex[id]
         }
 

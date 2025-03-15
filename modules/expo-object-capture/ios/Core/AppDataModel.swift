@@ -190,14 +190,15 @@ extension AppDataModel {
         tasks.append(Task<Void, Never> { [weak self] in
             for await cameraTracking in model.cameraTrackingUpdates {
                 logger.debug("Task got async camera state change to: \(String(describing: cameraTracking))")
-                sendEventToJS("onCameraTrackingChanged", ["state": convertCameraTrackingStateToString(cameraTracking)])
+              
+                sendEventToJS("onObjectCaptureEvent", ["type": jsEventType.cameraTracking, "data": convertCameraTrackingStateToString(cameraTracking)])
             }
             logger.log("^^^ Got nil from cameraTracking iterator!  Ending observation task...")
         })
         tasks.append(Task<Void, Never> { [weak self] in
-            for await newCapture in model.numberOfShotsTakenUpdates {
-                logger.debug("Task got async camera shhot  change to: \(String(describing: newCapture))")
-                sendEventToJS("onShoot", ["number": newCapture])
+            for await numberOfShots in model.numberOfShotsTakenUpdates {
+                logger.debug("Task got async camera shhot  change to: \(String(describing: numberOfShots))")
+                sendEventToJS("onObjectCaptureEvent", ["type": jsEventType.numberOfShots ,"data": numberOfShots])
             }
             logger.log("^^^ Got nil from cameraTracking iterator!  Ending observation task...")
         })
@@ -224,6 +225,13 @@ extension AppDataModel {
         DispatchQueue.main.async {
             module.sendEvent(eventName, body)
         }
+    }
+    enum jsEventType {
+        case feedback
+        case state
+        case cameraTracking
+        case scanPassComplete
+        case numberOfShots
     }
     // Should be called when a new capture is to be created, before the session will be needed.
     func startNewCapture() throws ->  ObjectCaptureSession {
@@ -286,7 +294,7 @@ extension AppDataModel {
             configuration: configuration)
 
         state = .reconstructing
-        sendEventToJS("onStateChanged", ["state": "reconstructing"])
+         sendEventToJS("onObjectCaptureEvent", ["type": jsEventType.state, "data": "reconstructing"])
     }
 
     private func reset() {
@@ -306,7 +314,7 @@ extension AppDataModel {
 
     private func onStateChanged(newState: ObjectCaptureSession.CaptureState) {
         logger.info("OCViewModel switched to state: \(String(describing: newState))")
-        sendEventToJS("onStateChanged", ["state": String(describing: newState)])
+        sendEventToJS("onObjectCaptureEvent", ["type": jsEventType.state, "data": String(describing: newState)])
         if case .completed = newState {
             logger.log("ObjectCaptureSession moved in .completed state.")
             if isSaveDraftEnabled {
@@ -353,7 +361,7 @@ extension AppDataModel {
                   currentMessages.append(feedbackString)
               }
           }
-        sendEventToJS("onFeedbackChanged", ["messages": currentMessages])
+        sendEventToJS("onObjectCaptureEvent", ["type": jsEventType.feedback, "data": currentMessages])
        
     }
 
@@ -411,8 +419,6 @@ extension AppDataModel {
                     switch orbit {
                         case .orbit1:
                             currentState = orbitCompleted ? .firstSegmentComplete : .firstSegmentNeedsWork
-                        case .orbit2:
-                            currentState = orbitCompleted ? .secondSegmentComplete : .secondSegmentNeedsWork
                         case .orbit3:
                             currentState = orbitCompleted ? .thirdSegmentComplete : .thirdSegmentNeedsWork
                         }
