@@ -312,13 +312,6 @@ public class ExpoObjectCaptureModule: Module {
                 }
             }
         }
-
-        View(ExpoObjectQuickView.self) {
-                Prop("filePath") { (view: ExpoObjectQuickView, filePath: String) in
-                    view.filePath = filePath
-                }
-            }
-
         // Méthode pour créer une nouvelle session de capture
         // Dans la méthode AsyncFunction("createCaptureSession")
 AsyncFunction("createCaptureSession") { (promise: Promise) in
