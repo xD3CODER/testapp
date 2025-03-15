@@ -20,6 +20,8 @@ export {
   addStateChangeListener,
   addFeedbackListener,
     navigateToReconstruction,
+    addCameraTrackingChangeListener,
+    addNumberOfShootsChangeListener,
   addProgressListener,
   addModelCompleteListener,
   addErrorListener,

@@ -8,10 +8,11 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
-  Animated
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import AnimatedFeedback from "@/components/AnimatedFeedback"
+import { useShakeAnimation } from "@/components/useShakeAnimation"
+import { useFadeAnimation } from "@/components/useFadeAnimation"
 import {
   ObjectCaptureView,
   CaptureModeType,
@@ -20,15 +21,17 @@ import {
   addStateChangeListener,
   createCaptureSession,
   attachSessionToView,
-    navigateToReconstruction,
+  navigateToReconstruction,
   finishCapture,
   cancelCapture,
   detectObject,
   resetDetection,
   getImageCount,
-  startCapture
+  startCapture, addCameraTrackingChangeListener, addNumberOfShootsChangeListener
 } from '@/modules/expo-object-capture';
-import add = Animated.add;
+
+import Animated from "react-native-reanimated"
+import {AnimatedCounter} from "@/components/ImagesCounter";
 
 // Composant de chargement
 const LoadingScreen = () => (
@@ -42,6 +45,7 @@ export default function ScanScreen() {
   const router = useRouter();
   const [state, setState] = useState<string>('initializing');
   const [feedbackMessages, setFeedbackMessages] = useState<string[]>([]);
+  const [cameraTracking, setCameraTracking] = useState<string>('normal');
   const [imageCount, setImageCount] = useState(0);
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const [showDebug, setShowDebug] = useState(false);
@@ -50,7 +54,7 @@ export default function ScanScreen() {
     console.log(message); // Toujours afficher dans la console
     setDebugLog(prev => [message, ...prev.slice(0, 19)]);
   }, []);
-
+    const { shake, animatedStyle } = useShakeAnimation(15);
   // Initialisation de la session de capture
   const initializeCapture = useCallback(async () => {
     try {
@@ -89,7 +93,7 @@ export default function ScanScreen() {
       addLog("Démarrage de la détection d'objet...");
       const success = await detectObject();
       if (!success) {
-        alert("object not found , " + state)
+        shake()
       }
       addLog(`Résultat de la détection: ${success ? "Réussi" : "Échec"}`);
     } catch (error) {
@@ -150,7 +154,9 @@ export default function ScanScreen() {
   // Configuration des écouteurs et initialisation
   useEffect(() => {
 
+    let cameraTrackingListener = null
     let stateListener = null
+    let shootListenr = null
     let modelCompleteListener = null
     let feedBackListener = null
     let errorListener = null
@@ -158,14 +164,23 @@ export default function ScanScreen() {
     initializeCapture().then(r => {
       addLog("Composant monté - configuration des écouteurs...");
 
+      cameraTrackingListener = addCameraTrackingChangeListener(async (event) => {
+        setCameraTracking(event.state);
+        addLog(`Camera Tracking: ${event.state}`);
+      })
+
+      shootListenr = addNumberOfShootsChangeListener(async (numberOfPictures) => {
+         addLog(`Nombre de photos: ${numberOfPictures}`)
+         setImageCount(numberOfPictures.number);
+      })
       // Configurer les écouteurs d'événements
       stateListener = addStateChangeListener(async (event) => {
         addLog(`État changé: ${event.state}`);
         if(event.state == "reconstructing") {
            const reconstrctution = await navigateToReconstruction();
-        if (!reconstrctution) {
-          throw new Error("Impossible d'attacher la session à la vue");
-        }
+            if (!reconstrctution) {
+              throw new Error("Impossible d'attacher la session à la vue");
+            }
         }
         setState(event.state);
 
@@ -192,6 +207,8 @@ export default function ScanScreen() {
     // Nettoyage à la destruction du composant
     return () => {
       addLog("Démontage du composant - nettoyage des écouteurs");
+      if(cameraTrackingListener)
+        cameraTrackingListener.remove()
       if(stateListener)
       stateListener.remove();
       if (modelCompleteListener)
@@ -210,6 +227,11 @@ export default function ScanScreen() {
 
   // Vérifier si on doit afficher le loader en fonction de l'état
 
+    const fadeStyle = useFadeAnimation(cameraTracking === "normal", {
+      duration: 400,
+      targetOpacity: 0.9
+    });
+
   const CaptureView = useMemo(() => (
       <ObjectCaptureView
               style={styles.captureView}
@@ -223,8 +245,15 @@ export default function ScanScreen() {
         <LoadingScreen />
       ) : (
         <SafeAreaView style={styles.container}>
+
           <View style={styles.captureViewContainer}>
             {CaptureView}
+          </View>
+          <View style={{position: 'absolute', zIndex: 222222}}>
+            <TouchableOpacity
+                  onPress={() => alert("")}>
+                <Text style={styles.buttonText}>BACK</Text>
+                </TouchableOpacity>
           </View>
 
           {/* Bouton de débogage en haut à droite */}
@@ -243,7 +272,6 @@ export default function ScanScreen() {
           {showDebug && (
             <View style={styles.debugContainer}>
               <Text style={styles.debugTitle}>État actuel: {state}</Text>
-              <Text style={styles.debugTitle}>Images: {imageCount}</Text>
               <ScrollView style={styles.debugScroll}>
                 {debugLog.map((log, index) => (
                   <Text key={index} style={styles.debugText}>{log}</Text>
@@ -251,45 +279,62 @@ export default function ScanScreen() {
               </ScrollView>
               <TouchableOpacity
                 style={styles.testButton}
-                onPress={testEvents}>
+                onPress={navigateToReconstruction}>
                 <Text style={styles.buttonText}>Tester les événements</Text>
               </TouchableOpacity>
             </View>
           )}
-
+          <TouchableOpacity
+                style={styles.testButton}
+                onPress={navigateToReconstruction}>
+                <Text style={styles.buttonText}>Tester les événements</Text>
+              </TouchableOpacity>
           {/* Contrôles de capture */}
-          <View style={styles.controlsContainer}>
+           <Animated.View style={[styles.controlsContainer, fadeStyle]}>
+             <>
             {state == "ready" && (
+                <Animated.View style={[animatedStyle]} >
                 <TouchableOpacity
                     style={styles.button}
                     onPress={handleDetectObject}>
                   <Text style={styles.buttonText}>Détecter l'objet</Text>
                 </TouchableOpacity>
+                 </Animated.View>
             )}
             {state == "detecting" && (
-                <>
+                <View>
+
                   <TouchableOpacity
                       style={styles.button}
                       onPress={startCapture}>
                     <Text style={styles.buttonText}>Démarrer la capture</Text>
                   </TouchableOpacity>
-              <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={handleCancelDetection}>
-                <Text style={styles.buttonText}>Annuler</Text>
-                </TouchableOpacity>
-
-              </>
+                  <TouchableOpacity
+                      style={styles.cancelButton}
+                      onPress={handleCancelDetection}>
+                    <Text style={styles.buttonText}>Annuler</Text>
+                    </TouchableOpacity>
+              </View>
                 )}
 
             {state === 'capturing' && (
-              <TouchableOpacity
-                style={styles.finishButton}
-                onPress={handleFinishCapture}>
-                <Text style={styles.buttonText}>Terminer la capture</Text>
-              </TouchableOpacity>
+                <View style={{flexDirection: "column",  flex: 1, width: "100%"}}>
+                  <View style={{flex: 1, flexDirection: "row", justifyContent: "center", alignItems: "center"}}>
+                      <TouchableOpacity
+                    style={styles.button}
+                    onPress={handleFinishCapture}>
+                    <Text style={styles.buttonText}>Terminer</Text>
+                  </TouchableOpacity>
+                  </View>
+                  <View style={{flex: 1, flexDirection: "row", paddingHorizontal: 10}}>
+                    <View style={{backgroundColor: "#00000044", borderRadius: 400}}>
+                       <AnimatedCounter current={imageCount} size={12}/>
+                    </View>
+                  </View>
+                  </View>
             )}
-          </View>
+             </>
+           </Animated.View>
         </SafeAreaView>
       )}
     </View>
@@ -324,20 +369,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 5,
   },
+  imageCounter: {
+    backgroundColor: "#00000044",
+    borderRadius: 400,
+    padding: 5,
+    color: 'white',
+    fontSize: 16,
+    marginBottom: 5,
+  },
   controlsContainer: {
     position: 'absolute',
-    bottom: 30,
+    flex: 1,
+    bottom: 10,
     left: 0,
     right: 0,
     alignItems: 'center',
-    padding: 20,
     zIndex: 10,
   },
   button: {
     backgroundColor: '#2196F3',
-    paddingVertical: 15,
+    paddingVertical: 20,
     paddingHorizontal: 30,
-    borderRadius: 25,
+    borderRadius: 10,
     width: 250,
     alignItems: 'center',
     marginBottom: 10,
@@ -346,16 +399,6 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  finishButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 25,
-    width: 250,
-    alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 10,
   },
   cancelButton: {
     backgroundColor: '#F44336',

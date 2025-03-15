@@ -155,6 +155,14 @@ class AppDataModel: Identifiable {
     private var tasks: [ Task<Void, Never> ] = []
 }
 
+func convertCameraTrackingStateToString(_ state: ObjectCaptureSession.Tracking) -> String {
+    switch state {
+    case .limited(_): return "limited"
+    case .normal: return "normal"
+    @unknown default: return "unknown"
+    }
+}
+
 extension AppDataModel {
     private func attachListeners() {
         logger.debug("Attaching listeners...")
@@ -177,6 +185,21 @@ extension AppDataModel {
                 self?.onStateChanged(newState: newState)
             }
             logger.log("^^^ Got nil from stateUpdates iterator!  Ending observation task...")
+        })
+
+        tasks.append(Task<Void, Never> { [weak self] in
+            for await cameraTracking in model.cameraTrackingUpdates {
+                logger.debug("Task got async camera state change to: \(String(describing: cameraTracking))")
+                sendEventToJS("onCameraTrackingChanged", ["state": convertCameraTrackingStateToString(cameraTracking)])
+            }
+            logger.log("^^^ Got nil from cameraTracking iterator!  Ending observation task...")
+        })
+        tasks.append(Task<Void, Never> { [weak self] in
+            for await newCapture in model.numberOfShotsTakenUpdates {
+                logger.debug("Task got async camera shhot  change to: \(String(describing: newCapture))")
+                sendEventToJS("onShoot", ["number": newCapture])
+            }
+            logger.log("^^^ Got nil from cameraTracking iterator!  Ending observation task...")
         })
     }
 
@@ -237,7 +260,7 @@ extension AppDataModel {
         return session
     }
 
-    private func switchToErrorState(error inError: Swift.Error) {
+    func switchToErrorState(error inError: Swift.Error) {
         // Set the error first since the transitions will assume it is non-nil!
         error = inError
         state = .failed
@@ -245,7 +268,7 @@ extension AppDataModel {
 
     // Moves from prepareToReconstruct to .reconstructing.
     // Should be called from the ReconstructionPrimaryView async task once it is on the screen.
-    private func startReconstruction() throws {
+     func startReconstruction() throws {
         logger.debug("startReconstruction() called.")
 
         var configuration = PhotogrammetrySession.Configuration()

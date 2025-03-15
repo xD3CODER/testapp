@@ -7,7 +7,7 @@ import {
   ErrorEvent,
   ObjectCaptureOptions,
   ObjectCaptureResult,
-  CaptureModeType
+  CaptureModeType, CameraTrackingChangeEvent, NumberOfShootsChangeEvent
 } from './ExpoObjectCapture.types';
 
 // Tentative d'obtenir le module natif
@@ -63,6 +63,13 @@ export function addStateChangeListener(callback: (event: StateChangeEvent) => vo
   return eventEmitter.addListener('onStateChanged', callback);
 }
 
+export function addCameraTrackingChangeListener(callback: (event: CameraTrackingChangeEvent) => void) {
+  return eventEmitter.addListener('onCameraTrackingChanged', callback);
+}
+export function addNumberOfShootsChangeListener(callback: (event: NumberOfShootsChangeEvent) => void) {
+  return eventEmitter.addListener('onShoot', callback);
+}
+
 export function addFeedbackListener(callback: (event: FeedbackEvent) => void) {
   return eventEmitter.addListener('onFeedbackChanged', callback);
 }
@@ -100,6 +107,7 @@ export default {
   cancelCapture,
   resetDetection,
   removeAllListeners,
+  addNumberOfShootsChangeListener,
   addStateChangeListener,
   addFeedbackListener,
   addProgressListener,

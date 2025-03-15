@@ -297,7 +297,7 @@ public class ExpoObjectCaptureModule: Module {
         Name("ExpoObjectCapture")
 
         // Définir les événements
-        Events("onStateChanged", "onFeedbackChanged", "onProcessingProgress", "onModelComplete", "onError", "onViewReady")
+        Events("onStateChanged", "onFeedbackChanged", "onProcessingProgress", "onShoot", "onModelComplete", "onError", "onViewReady", "onCameraTrackingChanged")
 
         // Initialiser après création
         OnCreate {
@@ -391,18 +391,53 @@ AsyncFunction("createCaptureSession") { (promise: Promise) in
             }
         }
         AsyncFunction("navigateToReconstruction") { (promise: Promise) in
-            Task { @MainActor in
-                // Récupérer toutes les instances de ExpoObjectCaptureView
-                for window in UIApplication.shared.windows {
-                    if let captureView = self.findExpoObjectCaptureView(in: window) {
-                        captureView.setReconstructionView()
-                        promise.resolve(true)
-                        return
-                    }
-                }
-                promise.resolve(false)
+    Task { @MainActor in
+        do {
+            // Trouver le contrôleur de vue visible actuel (qui est probablement le drawer)
+            guard let keyWindow = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) else {
+                promise.reject(NSError(domain: "ExpoObjectCapture", code: 2, userInfo: [NSLocalizedDescriptionKey: "No active window found"]))
+                return
             }
+
+            var topController = keyWindow.rootViewController
+            while let presentedController = topController?.presentedViewController {
+                topController = presentedController
+            }
+
+            // Vérifie si nous avons bien un contrôleur
+            guard let topController = topController,
+                  let folderManager = AppDataModel.instance.captureFolderManager else {
+                promise.reject(NSError(domain: "ExpoObjectCapture", code: 3, userInfo: [NSLocalizedDescriptionKey: "No visible controller or folder manager found"]))
+                return
+            }
+
+            // Créer la vue de reconstruction
+            let outputFile = folderManager.modelsFolder.appendingPathComponent("model-mobile.usdz")
+            let reconstructionView = ReconstructionPrimaryView(outputFile: outputFile)
+                .environment(AppDataModel.instance)
+
+            // Créer un nouveau contrôleur pour la vue de reconstruction
+            let reconstructionController = UIHostingController(rootView: AnyView(reconstructionView))
+            reconstructionController.modalPresentationStyle = .fullScreen
+
+            // Fermer le drawer actuel et présenter la vue de reconstruction
+            // Si topController est déjà présenté, on remplace sa vue
+            if topController.presentingViewController != nil {
+                // Transition de remplacement: on ferme le drawer et on présente la reconstruction
+                topController.dismiss(animated: true) {
+                    let rootController = keyWindow.rootViewController
+                    rootController?.present(reconstructionController, animated: true)
+                }
+            } else {
+                // Présenter directement sur le contrôleur racine
+                topController.present(reconstructionController, animated: true)
+            }
+            promise.resolve(true)
+        } catch {
+            promise.reject(error)
         }
+    }
+}
 
         AsyncFunction("detectObject") { (promise: Promise) in
             Task { @MainActor in
@@ -704,52 +739,6 @@ func convertSessionStateToString(_ state: ObjectCaptureSession.CaptureState) -> 
         }
         
         return nil
-    }
-
-    @MainActor
-    private func presentGuidedCapture(options: [String: Any]?) {
-        print("DEBUG: presentGuidedCapture appelé")
-
-        // Trouver le contrôleur de vue visible actuel plutôt que simplement le rootViewController
-        guard let keyWindow = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) else {
-            print("ERROR: Aucune fenêtre active trouvée")
-            capturePromise?.reject(NSError(domain: "ExpoObjectCapture", code: 1, userInfo: [NSLocalizedDescriptionKey: "No active window found"]))
-            return
-        }
-
-        // Trouver le contrôleur le plus visible dans la hiérarchie
-        var topController = keyWindow.rootViewController
-        while let presentedController = topController?.presentedViewController {
-            topController = presentedController
-        }
-
-        guard let topController = topController else {
-            print("ERROR: Impossible de trouver un contrôleur visible")
-            capturePromise?.reject(NSError(domain: "ExpoObjectCapture", code: 1, userInfo: [NSLocalizedDescriptionKey: "No visible controller found"]))
-            return
-        }
-
-        print("DEBUG: Trouvé contrôleur visible de type: \(type(of: topController))")
-
-        // Configurer AppDataModel
-        AppDataModel.instance.completionDelegate = self
-
-        // Créer la vue
-        let contentView = ContentView().environment(AppDataModel.instance)
-        self.hostingController = UIHostingController(rootView: AnyView(contentView))
-
-        if let hostingController = self.hostingController {
-            hostingController.modalPresentationStyle = .fullScreen
-
-            // Présenter sur le contrôleur visible
-            print("DEBUG: Présentation du contrôleur d'hébergement...")
-            topController.present(hostingController, animated: true) {
-                print("DEBUG: Contrôleur d'hébergement présenté avec succès")
-            }
-        } else {
-            print("ERROR: Échec de création du contrôleur d'hébergement")
-            capturePromise?.reject(NSError(domain: "ExpoObjectCapture", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to create hosting controller"]))
-        }
     }
 
     @MainActor

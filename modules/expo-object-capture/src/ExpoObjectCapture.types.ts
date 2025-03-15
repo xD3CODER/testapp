@@ -3,6 +3,14 @@ export interface StateChangeEvent {
   state: string;
 }
 
+export interface CameraTrackingChangeEvent {
+  state: string;
+}
+
+export interface NumberOfShootsChangeEvent {
+  number: number;
+}
+
 export interface FeedbackEvent {
   messages: string[];
 }

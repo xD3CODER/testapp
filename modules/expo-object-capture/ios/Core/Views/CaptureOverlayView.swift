@@ -19,7 +19,7 @@ struct CaptureOverlayView: View {
 
     // Reads persistently from the System settings where users can toggle it on/off once they
     // no longer feel they need it.
-    @AppStorage("show_tutorials") var areTutorialsEnabledInUserSettings: Bool = true
+    @AppStorage("show_tutorials") var areTutorialsEnabledInUserSettings: Bool = false
     
     @State private var showCaptureModeGuidance: Bool = false
     @State private var hasDetectionFailed = false
@@ -51,8 +51,7 @@ struct CaptureOverlayView: View {
                     VStack {
                         Spacer().frame(height: UIDevice.current.userInterfaceIdiom == .pad ? 65 : 25)
 
-                        FeedbackView(messageList: appModel.messageList)
-                            .layoutPriority(1)
+
                     }
                     .rotationEffect(rotationAngle)
                 }
