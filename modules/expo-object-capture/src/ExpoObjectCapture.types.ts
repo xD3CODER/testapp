@@ -6,12 +6,13 @@ export enum EventType {
   FEEDBACK = 'feedback',
   CAMERA_TRACKING = 'cameraTracking',
   SCAN_PASS_COMPLETE = 'scanPassComplete',
-  NUMBER_OF_SHOTS = 'numberOfShots'
+  NUMBER_OF_SHOTS = 'numberOfShots',
+  RECONSTRUCTION_PROGRESS = 'reconstructionProgress'
 }
 
 // Interface de base pour tous les événements
 export interface ObjectCaptureEvent {
-  type: EventType;
+  eventType: EventType;
   data: any;
 }
 
@@ -24,6 +25,7 @@ export enum CaptureState {
   FINISHING = 'finishing',
   COMPLETED = 'completed',
   FAILED = 'failed',
+  DONE = 'done',
   RECONSTRUCTING = 'reconstructing',
   UNKNOWN = 'unknown'
 }
@@ -45,6 +47,12 @@ export interface StateChangeEvent extends ObjectCaptureEvent {
 export interface FeedbackEvent extends ObjectCaptureEvent {
   eventType: EventType.FEEDBACK;
   data: string[];
+}
+
+// Événement de changement du progress de la reconstruction
+export interface ReconstructionEvent extends ObjectCaptureEvent {
+  eventType: EventType.RECONSTRUCTION_PROGRESS;
+  data: number;
 }
 
 // Événement de changement de suivi caméra
@@ -71,7 +79,8 @@ export type AnyObjectCaptureEvent =
     | FeedbackEvent
     | CameraTrackingEvent
     | ScanPassCompleteEvent
-    | NumberOfShotsEvent;
+    | NumberOfShotsEvent
+    | ReconstructionEvent;
 
 // Interface pour les options de configuration
 export interface ObjectCaptureOptions {
@@ -117,7 +126,8 @@ export interface ErrorEvent {
 export interface ObjectCaptureState {
   state: CaptureState;
   cameraTracking: CameraTrackingState;
-  imageCount: number;
+  imageCount?: number;
+  reconstructionProgress: number;
   feedbackMessages: string[];
   isInitialized: boolean;
   isInitializing: boolean;

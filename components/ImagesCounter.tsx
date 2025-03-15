@@ -18,7 +18,6 @@ export const AnimatedCounter = memo(({ current, total = 120, size = 20 }) => {
   // Valeurs pour l'animation
   const yPosition = useSharedValue(0);
   const opacity = useSharedValue(1);
-  const prevValueRef = useSharedValue(current);
 
   // Animation handler
   const animateTransition = useCallback(() => {
@@ -28,11 +27,8 @@ export const AnimatedCounter = memo(({ current, total = 120, size = 20 }) => {
 
     // Programmer l'animation d'entrée
     setTimeout(() => {
-      yPosition.value = 30; // Positionner sous la zone visible
+      yPosition.value = size * 1.5; // Positionner sous la zone visible
       opacity.value = 0;    // Invisible au début
-
-      // Actualiser la valeur de référence
-      prevValueRef.value = current;
 
       // Animer l'entrée du nouveau chiffre
       requestAnimationFrame(() => {
@@ -40,14 +36,12 @@ export const AnimatedCounter = memo(({ current, total = 120, size = 20 }) => {
         opacity.value = withTiming(1, ANIMATION_CONFIG.TIMING);
       });
     }, 100);
-  }, [current, yPosition, opacity, prevValueRef]);
+  }, [yPosition, opacity]);
 
   // Déclencher l'animation lors du changement de valeur
   useEffect(() => {
-    if (current !== prevValueRef.value) {
-      animateTransition();
-    }
-  }, [current, animateTransition, prevValueRef.value]);
+    animateTransition();
+  }, [current, animateTransition]);
 
   // Styles animés
   const animatedStyle = useAnimatedStyle(() => ({
@@ -63,16 +57,16 @@ export const AnimatedCounter = memo(({ current, total = 120, size = 20 }) => {
   const separatorStyle = { fontSize: size - 4, color: "white" };
 
   return (
-    <View style={containerStyle}>
-      <View style={counterStyle}>
-        <Animated.Text style={numberStyle}>
-          {prevValueRef.value}
-        </Animated.Text>
-        <Text style={separatorStyle}>/</Text>
-        <Text style={staticNumberStyle}>{total}</Text>
+      <View style={containerStyle}>
+        <View style={counterStyle}>
+          <Animated.Text style={numberStyle}>
+            {current}  {/* Utilisation directe de current */}
+          </Animated.Text>
+          <Text style={separatorStyle}>/</Text>
+          <Text style={staticNumberStyle}>{total}</Text>
+        </View>
+        <Octicons name="image" color="white" size={size} />
       </View>
-      <Octicons name="image" color="white" size={size} />
-    </View>
   );
 });
 
@@ -88,8 +82,8 @@ const styles = StyleSheet.create({
     color: "white",
     columnGap: 2,
     flexDirection: 'row',
-    justifyContent: "center",
-    alignItems: 'center',
+    justifyContent: "center",  // Centrer horizontalement
+    alignItems: 'center',      // Centrer verticalement aussi
     overflow: 'hidden',
   },
   number: {

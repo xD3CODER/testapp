@@ -4,11 +4,14 @@ import SwiftUI
 public class ExpoObjectCaptureView: ExpoView {
     private var hostingController: UIHostingController<AnyView>?
     private var currentSession: ObjectCaptureSession?
-
+    static var currentInstance: ExpoObjectCaptureView?
+       
     let onViewReady = EventDispatcher()
 
     required public init(appContext: AppContext? = nil) {
         super.init(appContext: appContext)
+        // Enregistrer l'instance
+        ExpoObjectCaptureView.currentInstance = self
         setupInitialView()
     }
 
@@ -29,14 +32,20 @@ public class ExpoObjectCaptureView: ExpoView {
         addSubview(initialView.view)
         hostingController = initialView
 
-   
-        print("CALL EVENT")
-        onViewReady()
-        
     }
+    
+    override public func didMoveToWindow() {
+        super.didMoveToWindow()
+        
+        // La vue est maintenant attachée à une fenêtre (à la hiérarchie de vues)
+        if window != nil {
+            print("Vue attachée à la fenêtre - bridge probablement prêt")
+            onViewReady(["ready": true])
+        }
+    }
+    
 public func setReconstructionView() {
     print("SETTING RECONSTRUCTION VIEW")
-    hostingController?.view.removeFromSuperview()
 
     guard let captureFolderManager = AppDataModel.instance.captureFolderManager else {
         print("ERROR: Capture folder manager is nil")
@@ -54,7 +63,8 @@ public func setReconstructionView() {
                 .environment(AppDataModel.instance)
         )
     )
-
+    
+    hostingController?.view.removeFromSuperview()
     captureView.view.frame = bounds
     captureView.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     addSubview(captureView.view)

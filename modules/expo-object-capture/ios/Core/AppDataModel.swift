@@ -33,6 +33,15 @@ class AppDataModel: Identifiable {
        }
     
     static let instance = AppDataModel()
+    
+    
+    var modelPath: URL?
+    
+    func setModelPath(_ path: URL) {
+        print("set path to ", path)
+        self.modelPath = path
+    }
+    
 
     /// When we start the capture phase, this will be set to the correct locations in the captureFolderManager.
     var objectCaptureSession: ObjectCaptureSession? {
@@ -45,10 +54,12 @@ class AppDataModel: Identifiable {
         }
     }
 
-    static let minNumImages = 10
+    static let minNumImages = 3
 
     /// Once we are headed to reconstruction portion, we will hold the session here.
     private(set) var photogrammetrySession: PhotogrammetrySession?
+    
+    
 
     /// When we start a new capture, the folder will be set here.
     private(set) var captureFolderManager: CaptureFolderManager?
@@ -191,14 +202,14 @@ extension AppDataModel {
             for await cameraTracking in model.cameraTrackingUpdates {
                 logger.debug("Task got async camera state change to: \(String(describing: cameraTracking))")
               
-                sendEventToJS("onObjectCaptureEvent", ["eventType": jsEventType.cameraTracking, "data": convertCameraTrackingStateToString(cameraTracking)])
+                sendEventToJS(["eventType": jsEventType.cameraTracking, "data": convertCameraTrackingStateToString(cameraTracking)])
             }
             logger.log("^^^ Got nil from cameraTracking iterator!  Ending observation task...")
         })
         tasks.append(Task<Void, Never> { [weak self] in
             for await numberOfShots in model.numberOfShotsTakenUpdates {
                 logger.debug("Task got async camera shhot  change to: \(String(describing: numberOfShots))")
-                sendEventToJS("onObjectCaptureEvent", ["eventType": jsEventType.numberOfShots ,"data": numberOfShots])
+                sendEventToJS(["eventType": jsEventType.numberOfShots ,"data": numberOfShots])
             }
             logger.log("^^^ Got nil from cameraTracking iterator!  Ending observation task...")
         })
@@ -219,7 +230,7 @@ extension AppDataModel {
             removeCaptureFolder()
         }
     }
-    func sendEventToJS(_ eventName: String, _ body: [String: Any]) {
+    func sendEventToJS(_ body: [String: Any]) {
         guard let module = expoModule as? ExpoObjectCaptureModule else { return }
 
        
@@ -232,17 +243,20 @@ extension AppDataModel {
         }
 
         DispatchQueue.main.async {
-            module.sendEvent(eventName, processedBody)
+            module.sendEvent("onObjectCaptureEvent", processedBody)
         }
     
     }
     enum jsEventType: String {
         case feedback = "feedback"
        case state = "state"
+        case reconstructingSate = "reconstructingState"
        case cameraTracking = "cameraTracking"
        case scanPassComplete = "scanPassComplete"
        case numberOfShots = "numberOfShots"
+        case reconstructionProgress = "reconstructionProgress"
     }
+    
     // Should be called when a new capture is to be created, before the session will be needed.
     func startNewCapture() throws ->  ObjectCaptureSession {
         logger.log("startNewCapture() called...")
@@ -304,7 +318,7 @@ extension AppDataModel {
             configuration: configuration)
 
         state = .reconstructing
-         sendEventToJS("onObjectCaptureEvent", ["eventType": jsEventType.state, "data": "reconstructing"])
+        sendEventToJS(["eventType": jsEventType.state, "data": "reconstructing"])
     }
 
     private func reset() {
@@ -324,7 +338,7 @@ extension AppDataModel {
 
     private func onStateChanged(newState: ObjectCaptureSession.CaptureState) {
         logger.info("OCViewModel switched to state: \(String(describing: newState))")
-        sendEventToJS("onObjectCaptureEvent", ["eventType": jsEventType.state, "data": String(describing: newState)])
+        sendEventToJS( ["eventType": jsEventType.state, "data": String(describing: newState)])
         if case .completed = newState {
             logger.log("ObjectCaptureSession moved in .completed state.")
             if isSaveDraftEnabled {
@@ -371,7 +385,7 @@ extension AppDataModel {
                   currentMessages.append(feedbackString)
               }
           }
-        sendEventToJS("onObjectCaptureEvent", ["eventType": jsEventType.feedback, "data": currentMessages])
+        sendEventToJS(["eventType": jsEventType.feedback, "data": currentMessages])
        
     }
 
@@ -388,7 +402,6 @@ extension AppDataModel {
                 }
             case .prepareToReconstruct:
                 // Clean up the session to free GPU and memory resources.
-                //@todo objectCaptureSession = nil
                 do {
                     try startReconstruction()
                 } catch {

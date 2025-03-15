@@ -56,5 +56,6 @@ export const {
   setCaptureMode,
   startNewCapture,
   startDetecting,
-  startCapturing
+  startCapturing,
+    getModelPath,
 } = ExpoObjectCaptureModule;

@@ -11,6 +11,7 @@ import os
 
 private let logger = Logger(subsystem: ExpoGuidedCapture.subsystem, category: "ReconstructionPrimaryView")
 
+/*
 struct ReconstructionPrimaryView: View {
     @Environment(AppDataModel.self) var appModel
     let outputFile: URL
@@ -31,6 +32,21 @@ struct ReconstructionPrimaryView: View {
                                        completed: $completed,
                                        cancelled: $cancelled)
         }
+    }
+}
+*/
+
+struct ReconstructionPrimaryView: View {
+    @Environment(AppDataModel.self) var appModel
+    let outputFile: URL
+
+    @State private var completed: Bool = false
+    @State private var cancelled: Bool = false
+
+    var body: some View {
+        ReconstructionProgressView(outputFile: outputFile,
+                                   completed: $completed,
+                                   cancelled: $cancelled)
     }
 }
 
@@ -55,7 +71,7 @@ struct ReconstructionProgressView: View {
     private func isReconstructing() -> Bool {
         return !completed && !gotError && !cancelled
     }
-
+    
     var body: some View {
         VStack(spacing: 0) {
             if isReconstructing() {
@@ -127,6 +143,7 @@ struct ReconstructionProgressView: View {
                     case .requestProgress(let request, fractionComplete: let fractionComplete):
                         if case .modelFile = request {
                             progress = Float(fractionComplete)
+                            appModel.sendEventToJS(["data": fractionComplete, "eventType": AppDataModel.jsEventType.reconstructionProgress])
                         }
                     case .requestProgressInfo(let request, let progressInfo):
                         if case .modelFile = request {
@@ -136,6 +153,8 @@ struct ReconstructionProgressView: View {
                     case .requestComplete(let request, _):
                         switch request {
                             case .modelFile(_, _, _):
+                                appModel.setModelPath(outputFile)
+                            appModel.sendEventToJS(["data": "done", "eventType": AppDataModel.jsEventType.state])
                                 logger.log("RequestComplete: .modelFile")
                             case .modelEntity(_, _), .bounds, .poses, .pointCloud:
                                 // Not supported yet

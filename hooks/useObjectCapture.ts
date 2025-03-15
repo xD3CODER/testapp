@@ -24,19 +24,20 @@ export function useObjectCaptureState(): ObjectCaptureState {
         feedbackMessages: [],
         isInitialized: false,
         isInitializing: false,
+        reconstructionProgress:0,
         error: null,
         scanPassComplete: false,
         setInitializationState: () => {},
         clearError: () => {}
     });
 
-    const [viewReady, setViewReady] = useState(false);
+    const [viewReady, setOnViewReady] = useState(false);
 
     // Configurer un seul écouteur global pour tous les événements
     useEffect(() => {
         // Écouteur principal pour les événements de capture d'objet
         const subscription = addObjectCaptureEventListener((event: AnyObjectCaptureEvent) => {
-            switch (event.type) {
+            switch (event.eventType) {
                 case EventType.STATE:
                     setCaptureState(prev => ({ ...prev, state: event.data }));
                     break;
@@ -56,6 +57,11 @@ export function useObjectCaptureState(): ObjectCaptureState {
                 case EventType.SCAN_PASS_COMPLETE:
                     setCaptureState(prev => ({ ...prev, scanPassComplete: event.data }));
                     break;
+
+                case EventType.RECONSTRUCTION_PROGRESS:
+                    setCaptureState(prev => ({ ...prev, reconstructionProgress: event.data }));
+                    break;
+
 
                 default:
                     console.log('Événement non géré:', event);
@@ -90,5 +96,5 @@ export function useObjectCaptureState(): ObjectCaptureState {
     }, []);
 
 
-    return {...captureState, viewReady, setViewReady};
+    return {...captureState, viewReady, setOnViewReady};
 }

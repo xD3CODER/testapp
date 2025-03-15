@@ -247,7 +247,6 @@ class SessionCleanupManager {
 
 public class ExpoObjectCaptureModule: Module {
     // MARK: Properties
-
     // Session partagée pour être utilisée par plusieurs méthodes
     @MainActor private var objectCaptureSession: ObjectCaptureSession?
     @MainActor private var capturePromise: Promise?
@@ -372,70 +371,57 @@ AsyncFunction("createCaptureSession") { (promise: Promise) in
         AsyncFunction("attachSessionToView") { (promise: Promise) in
             Task { @MainActor in
                 guard let session = self.objectCaptureSession else {
-                    print("Aucune session disponible à attacher")
+                    promise.resolve(false)
+                    return
+                }
+                
+                if let captureView = ExpoObjectCaptureView.currentInstance {
+                    captureView.setSession(session)
+                    promise.resolve(true)
+                } else {
+                    promise.resolve(false)
+                }
+            }
+        }
+        AsyncFunction("navigateToReconstruction") { (promise: Promise) in
+            Task { @MainActor in
+                guard let session = self.objectCaptureSession else {
                     promise.resolve(false)
                     return
                 }
 
-                // Récupérer toutes les instances de ExpoObjectCaptureView
-                for window in UIApplication.shared.windows {
-                    if let captureView = self.findExpoObjectCaptureView(in: window) {
-                        captureView.setSession(session)
-                        promise.resolve(true)
-                        return
+                // Trouver le contrôleur de vue visible actuel
+                guard let keyWindow = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) else {
+                    promise.resolve(false)
+                    return
+                }
+
+                var topController = keyWindow.rootViewController
+                while let presentedController = topController?.presentedViewController {
+                    topController = presentedController
+                }
+
+                guard let topController = topController else {
+                    promise.resolve(false)
+                    return
+                }
+
+                if let captureView = ExpoObjectCaptureView.currentInstance {
+                    DispatchQueue.main.async {
+                        captureView.setReconstructionView()
+        
+                        topController.dismiss(animated: true) {
+                            AppDataModel.instance.objectCaptureSession = nil
+                            promise.resolve(true)
+                        }
+                       
                     }
+                } else {
+                    promise.resolve(false)
                 }
-                promise.resolve(false)
+                
             }
         }
-        AsyncFunction("navigateToReconstruction") { (promise: Promise) in
-    Task { @MainActor in
-        do {
-            // Trouver le contrôleur de vue visible actuel (qui est probablement le drawer)
-            guard let keyWindow = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) else {
-                promise.reject(NSError(domain: "ExpoObjectCapture", code: 2, userInfo: [NSLocalizedDescriptionKey: "No active window found"]))
-                return
-            }
-
-            var topController = keyWindow.rootViewController
-            while let presentedController = topController?.presentedViewController {
-                topController = presentedController
-            }
-
-            // Vérifie si nous avons bien un contrôleur
-            guard let topController = topController,
-                  let folderManager = AppDataModel.instance.captureFolderManager else {
-                promise.reject(NSError(domain: "ExpoObjectCapture", code: 3, userInfo: [NSLocalizedDescriptionKey: "No visible controller or folder manager found"]))
-                return
-            }
-
-            // Créer la vue de reconstruction
-            let outputFile = folderManager.modelsFolder.appendingPathComponent("model-mobile.usdz")
-            let reconstructionView = ReconstructionPrimaryView(outputFile: outputFile)
-                .environment(AppDataModel.instance)
-
-            // Créer un nouveau contrôleur pour la vue de reconstruction
-            let reconstructionController = UIHostingController(rootView: AnyView(reconstructionView))
-            reconstructionController.modalPresentationStyle = .fullScreen
-
-            // Fermer le drawer actuel et présenter la vue de reconstruction
-            // Si topController est déjà présenté, on remplace sa vue
-            if topController.presentingViewController != nil {
-                // Transition de remplacement: on ferme le drawer et on présente la reconstruction
-                topController.dismiss(animated: true) {
-                    let rootController = keyWindow.rootViewController
-                    rootController?.present(reconstructionController, animated: true)
-                }
-            } else {
-                // Présenter directement sur le contrôleur racine
-                topController.present(reconstructionController, animated: true)
-            }
-            promise.resolve(true)
-        } catch {
-            promise.reject(error)
-        }
-    }
-}
 
         AsyncFunction("detectObject") { (promise: Promise) in
             Task { @MainActor in
@@ -529,7 +515,7 @@ AsyncFunction("createCaptureSession") { (promise: Promise) in
                             )
                         )
                         .environment(AppDataModel.instance)
-                        .environment(session)  // Ajouter explicitement la session à l'environnement
+                        .environment(session)
 
                         let hostingController = UIHostingController(rootView: AnyView(onboardingView))
                         hostingController.modalPresentationStyle = .fullScreen
@@ -556,6 +542,16 @@ AsyncFunction("createCaptureSession") { (promise: Promise) in
             }
         }
 
+        AsyncFunction("getModelPath") { (promise: Promise) in
+            Task { @MainActor in
+                if let url =  AppDataModel.instance.modelPath {
+                    return promise.resolve(url.standardizedFileURL)
+                }
+                promise.resolve("")
+            }
+        }
+        
+        
         // Fonction pour deselectionner la bbox
         AsyncFunction("resetDetection") { (promise: Promise) in
             Task { @MainActor in

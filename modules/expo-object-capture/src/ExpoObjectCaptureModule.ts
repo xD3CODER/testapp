@@ -34,6 +34,7 @@ try {
     finishCapture: async () => false,
     cancelCapture: async () => false,
     getImageCount: () => 0,
+    getModelPath: async () => "" ,
     getImageCountAsync: async () => 0,
     setCaptureMode: () => {},
     getCurrentState: () => 'unsupported',
@@ -51,6 +52,7 @@ export const attachSessionToView = async () => nativeModule.attachSessionToView(
 export const navigateToReconstruction = async () => nativeModule.navigateToReconstruction();
 export const startCapture = async () => nativeModule.startCapture();
 export const getImageCountAsync = async () => nativeModule.getImageCountAsync();
+export const getModelPath = async () => nativeModule.getModelPath();
 export const finishCapture = async () => nativeModule.finishCapture();
 export const cancelCapture = async () => nativeModule.cancelCapture();
 export const detectObject = async () => nativeModule.detectObject();
@@ -131,6 +133,13 @@ export function addObjectCaptureEventListener(
         };
         break;
 
+      case EventType.RECONSTRUCTION_PROGRESS:
+        typedEvent = {
+          eventType: EventType.RECONSTRUCTION_PROGRESS,
+          data: rawEvent.data as number
+        };
+        break;
+
       default:
         // Gestion de cas par défaut
         typedEvent = rawEvent as unknown as AnyObjectCaptureEvent;
@@ -158,6 +167,7 @@ export default {
   startCapture,
   startDetecting: detectObject,
   finishCapture,
+  getModelPath,
   cancelCapture,
   resetDetection,
   removeAllListeners,

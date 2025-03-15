@@ -15,10 +15,18 @@ import { useFadeAnimation } from "@/components/useFadeAnimation";
 import {
   ObjectCaptureView,
   CaptureModeType,
-  CaptureState
+  CaptureState,
+  attachSessionToView,
+  detectObject,
+  resetDetection,
+  startCapture,
+  finishCapture,
+  getModelPath,
+  cancelCapture,
+  navigateToReconstruction,
+    createCaptureSession,
 } from '@/modules/expo-object-capture';
 
-import {objectCaptureActions} from "@/hooks/useObjectCaptureActions"
 import {useObjectCaptureState} from "@/hooks/useObjectCapture"
 
 import Animated from "react-native-reanimated";
@@ -48,21 +56,12 @@ export default function ScanScreen() {
     error,
     scanPassComplete,
     setInitializationState,
+      reconstructionProgress,
     clearError,
     viewReady,
       setOnViewReady
   } = useObjectCaptureState();
 
-  // Utiliser les actions pour interagir avec le module natif
-  const {
-    initialize,
-    detectObject,
-    resetDetection,
-    startCapture,
-    finishCapture,
-    cancelCapture,
-    navigateToReconstruction
-  } = objectCaptureActions;
 
   // Animation de secousse pour la détection d'objet
   const { shake, animatedStyle } = useShakeAnimation(15);
@@ -84,15 +83,10 @@ export default function ScanScreen() {
         // Étape 1: Créer la session
         const sessionCreated = await createCaptureSession();
         if (!sessionCreated) throw new Error("Impossible de créer la session");
-
-        // Attendre un peu pour s'assurer que la session est bien créée
-        await new Promise(resolve => setTimeout(resolve, 500));
-
         // Étape 2: Attacher la session à la vue
         const sessionAttached = await attachSessionToView();
         if (!sessionAttached) throw new Error("Impossible d'attacher la session");
-
-        setInitializationState(false, true);
+        setTimeout(() =>     setInitializationState(false, true), 250);
       } catch (error) {
         console.error("Erreur d'initialisation:", error);
         setInitializationState(false, false, String(error));
@@ -100,7 +94,6 @@ export default function ScanScreen() {
     };
 
     if (viewReady) {
-      alert("")
       initSession();
     }
   }, [viewReady]);
@@ -115,13 +108,19 @@ export default function ScanScreen() {
     }
   }, [error, clearError]);
 
+
   // Gérer la complétion de la reconstruction
   useEffect(() => {
     if (state === CaptureState.RECONSTRUCTING) {
       addLog("État de reconstruction détecté, navigation en cours...");
       navigateToReconstruction().catch(err => {
         addLog(`Erreur de navigation: ${err}`);
-      });
+      }).then((e) => console.log("Successfully display reconstruction screen ? ", e));
+    }
+    if(state === CaptureState.DONE) {
+      getModelPath().then((modelPath) => {
+        console.log("Model path: ", modelPath);
+      })
     }
   }, [state]);
 
@@ -178,7 +177,9 @@ export default function ScanScreen() {
 
   // Afficher/masquer le débogage
   const handleToggleDebug = useCallback(() => {
-    setShowDebug(prev => !prev);
+    getModelPath().then((modelPath) => {
+      console.log("Model path: ", modelPath);
+    })
   }, []);
 
   // Animation de fondu basée sur l'état du tracking caméra
@@ -187,28 +188,26 @@ export default function ScanScreen() {
     targetOpacity: 0.9
   });
 
-  // Mémoriser la vue de capture pour éviter les re-rendus inutiles
-  const CaptureView = useMemo(() => (
-      <ObjectCaptureView
-          style={styles.captureView}
-          captureMode={CaptureModeType.OBJECT}
-          onViewReady={() => console.warn("ready")}
-      />
-  ), []);
-
-  // Afficher l'écran de chargement pendant l'initialisation
+  const CaptureView = useMemo(() => {
+    return(
+        <ObjectCaptureView
+            style={styles.captureView}
+            captureMode={CaptureModeType.OBJECT}
+            onViewReady={(event) => {
+              setOnViewReady(true);
+            }}
+        />
+    )
+  }, [setOnViewReady])
 
 
   return (
       <View style={styles.container}>
+        {(isInitializing || !isInitialized) && <LoadingScreen />}
         <SafeAreaView style={styles.container}>
 
           <View style={styles.captureViewContainer}>
-            <ObjectCaptureView
-                style={styles.captureView}
-                captureMode={CaptureModeType.OBJECT}
-                onViewReady={() => console.warn("ready")}
-            />
+            {CaptureView}
           </View>
 
           <View style={{position: 'absolute', zIndex: 222222}}>
@@ -413,6 +412,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   loadingContainer: {
+    position: 'absolute',
+    zIndex: 999,
+    top:0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
