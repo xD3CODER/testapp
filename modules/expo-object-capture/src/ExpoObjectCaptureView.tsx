@@ -12,3 +12,10 @@ const NativeObjectCaptureView = requireNativeViewManager('ExpoObjectCapture');
 export function ObjectCaptureView(props: ObjectCaptureViewProps) {
   return <NativeObjectCaptureView {...props} />;
 }
+
+const NativeQuickView = requireNativeViewManager('ExpoObjectQuick');
+
+
+export function ObjectQuickView(props: ObjectCaptureViewProps) {
+  return <NativeQuickView {...props} />;
+}

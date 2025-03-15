@@ -66,7 +66,7 @@ extension AppDataModel {
             objc_setAssociatedObject(self, &AssociatedKeys.feedbackDelegateKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
     }
-    
+
     // Méthode pour terminer la capture avec succès
     @MainActor
     func completeCapture(with data: [String: Any]) {
@@ -311,10 +311,13 @@ public class ExpoObjectCaptureModule: Module {
                     }
                 }
             }
-
-
         }
-    
+
+        View(ExpoObjectQuickView.self) {
+                Prop("filePath") { (view: ExpoObjectQuickView, filePath: String) in
+                    view.filePath = filePath
+                }
+            }
 
         // Méthode pour créer une nouvelle session de capture
         // Dans la méthode AsyncFunction("createCaptureSession")
@@ -544,10 +547,21 @@ AsyncFunction("createCaptureSession") { (promise: Promise) in
 
         AsyncFunction("getModelPath") { (promise: Promise) in
             Task { @MainActor in
-                if let url =  AppDataModel.instance.modelPath {
-                    return promise.resolve(url.standardizedFileURL)
+                if let url = AppDataModel.instance.modelPath {
+                    let standardizedPath = url.standardizedFileURL.path
+                    print("DEBUG: Returning model path: \(standardizedPath)")
+                    
+                    // Vérifier si le fichier existe vraiment
+                    if FileManager.default.fileExists(atPath: standardizedPath) {
+                        promise.resolve(standardizedPath)
+                    } else {
+                        print("DEBUG: Model file does not exist")
+                        promise.resolve("")
+                    }
+                } else {
+                    print("DEBUG: No model path set")
+                    promise.resolve("")
                 }
-                promise.resolve("")
             }
         }
         

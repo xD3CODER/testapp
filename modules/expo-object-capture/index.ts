@@ -2,7 +2,7 @@ import ExpoObjectCaptureModule from './src/ExpoObjectCaptureModule';
 export default ExpoObjectCaptureModule;
 
 // Exporter la vue native
-export { ObjectCaptureView } from "./src/ExpoObjectCaptureView";
+export { ObjectCaptureView, ObjectQuickView } from "./src/ExpoObjectCaptureView";
 
 // Exporter l'émetteur d'événements
 export { eventEmitter } from './src/ExpoObjectCaptureModule';
